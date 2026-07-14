@@ -241,6 +241,8 @@ def run_demo_federated(args):
         seed=args.seed,
         attacker_enabled=True,
         verbose=not args.quiet,
+        dlg_batch_size=args.batch_size,
+        dlg_num_iters=args.num_iters,
     )
 
     print(f"\n{'='*70}")
@@ -252,6 +254,57 @@ def run_demo_federated(args):
     print(f"  Ataques DLG realizados: {len(results.get('dlg_results', []))}")
 
     return results
+
+
+def run_demo_scenario(args):
+    """Executa um cenário específico pré-definido."""
+    from src.scenarios import run_scenario, PREDEFINED_SCENARIOS
+    
+    if args.scenario not in PREDEFINED_SCENARIOS:
+        print(f"\n[ERRO] Cenário '{args.scenario}' não encontrado.")
+        print(f"Cenários disponíveis: {', '.join(PREDEFINED_SCENARIOS.keys())}")
+        sys.exit(1)
+        
+    scenario = PREDEFINED_SCENARIOS[args.scenario]
+    
+    # Sobrescrever iterações/batch se --quick for usado
+    if args.quick:
+        scenario.dlg_num_iters = 100
+        if scenario.num_rounds > 2:
+            scenario.num_rounds = 2
+            
+    device = get_device()
+    result = run_scenario(scenario, device=device, verbose=not args.quiet)
+    
+    if result.success and result.metrics_df is not None:
+        print(f"\n{'='*70}")
+        print(f" RESULTADOS DO CENÁRIO: {args.scenario}")
+        print(f"{'='*70}")
+        df = result.metrics_df
+        print(f"  SSIM médio: {df['ssim'].mean():.4f}")
+        print(f"  PSNR médio: {df['psnr'].mean():.1f} dB")
+        print(f"  MSE médio:  {df['mse'].mean():.6f}")
+        
+    return result
+
+
+def run_demo_sweep(args):
+    """Executa uma bateria (sweep) de vários cenários e gera relatório."""
+    from src.scenarios import run_scenario_sweep, generate_report, PREDEFINED_SCENARIOS
+    
+    device = get_device()
+    
+    # Se args.sweep for "all", roda tudo, senão roda a lista especificada
+    scenarios_to_run = args.sweep
+    if "all" in scenarios_to_run:
+        scenarios_to_run = list(PREDEFINED_SCENARIOS.keys())
+        
+    print(f"\nIniciando Sweep de {len(scenarios_to_run)} cenários...")
+    df = run_scenario_sweep(scenarios_to_run, device=device, verbose=not args.quiet)
+    
+    generate_report(df, title=f"Relatório do Sweep ({len(scenarios_to_run)} cenários)")
+    return df
+
 
 
 # =========================================================================
@@ -273,7 +326,9 @@ Exemplos:
     )
 
     # Modo de execução
-    parser.add_argument("--federated", action="store_true", help="Executar simulação federada")
+    parser.add_argument("--federated", action="store_true", help="Executar simulação federada (custom parameters)")
+    parser.add_argument("--scenario", type=str, help="Executar um cenário predefinido pelo nome (ex: baseline)")
+    parser.add_argument("--sweep", nargs="+", help="Executar uma lista de cenários ou 'all' para todos")
     parser.add_argument("--quick", action="store_true", help="Modo rápido (menos iterações)")
     parser.add_argument("--quiet", action="store_true", help="Suprimir logs detalhados")
 
@@ -284,9 +339,9 @@ Exemplos:
 
     # Hiperparâmetros da perda
     parser.add_argument("--cosine-weight", type=float, default=0.5, help="Peso cosine na loss")
-    parser.add_argument("--tv-start", type=float, default=1e-5, help="TV inicial")
-    parser.add_argument("--tv-end", type=float, default=1e-7, help="TV final")
-    parser.add_argument("--label-anchor", type=float, default=0.1, help="Peso label anchoring")
+    parser.add_argument("--tv-coeff-start", type=float, default=1e-5, help="TV inicial")
+    parser.add_argument("--tv-coeff-end", type=float, default=1e-7, help="TV final")
+    parser.add_argument("--label-anchor-weight", type=float, default=0.1, help="Peso label anchoring")
 
     # Defesa
     parser.add_argument("--defense", type=str, default="none",
@@ -309,7 +364,11 @@ Exemplos:
         print("[MODO RÁPIDO] Iterações reduzidas para demonstração.")
 
     try:
-        if args.federated:
+        if args.sweep:
+            run_demo_sweep(args)
+        elif args.scenario:
+            run_demo_scenario(args)
+        elif args.federated:
             run_demo_federated(args)
         elif args.defense != "none":
             run_demo_defense(args)

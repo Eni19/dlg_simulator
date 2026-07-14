@@ -87,7 +87,7 @@ class LeNet(nn.Module):
 
 def create_lenet(
     num_classes: int = 100,
-    device: str = "cpu",
+    device: str | torch.device = "cpu",
     seed: int | None = None
 ) -> LeNet:
     """
@@ -95,7 +95,7 @@ def create_lenet(
 
     Args:
         num_classes: Número de classes (default: 100, CIFAR-100).
-        device: Dispositivo para instanciar o modelo ('cpu' ou 'cuda').
+        device: torch.device ou string para instanciar o modelo.
         seed: Se fornecida, define a semente aleatória antes da inicialização
               dos pesos para reprodutibilidade.
 

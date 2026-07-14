@@ -33,19 +33,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 
-# Flower imports — com fallback para quando não instalado
+# Flower — NumPyClient é a única dependência real necessária
 try:
-    import flwr as fl
     from flwr.client import NumPyClient
-    from flwr.common import Context, Metrics, ndarrays_to_parameters, parameters_to_ndarrays
-    from flwr.server import ServerApp, ServerConfig, ServerAppComponents
-    from flwr.server.strategy import FedAvg
-    from flwr.simulation import start_simulation
     FLOWER_AVAILABLE = True
 except ImportError:
     FLOWER_AVAILABLE = False
     NumPyClient = object  # type: ignore
-    # Log warning
     import warnings
     warnings.warn(
         "Flower (flwr) não está instalado. "
@@ -289,18 +283,28 @@ def set_model_parameters_from_list(
     """
     Carrega parâmetros de uma lista NumPy para o modelo PyTorch.
 
+    Itera apenas sobre parâmetros treináveis (requires_grad=True)
+    e atualiza seus dados in-place usando torch.from_numpy.
+
     Args:
         model: Modelo PyTorch a ser atualizado.
         parameters: Lista de arrays NumPy com os novos valores.
     """
-    params_dict = zip(
-        [name for name, _ in model.named_parameters() if model.state_dict()[name].requires_grad],
-        parameters,
-    )
-    state_dict = OrderedDict()
-    for (name, _), param in zip(model.named_parameters(), parameters):
-        state_dict[name] = torch.tensor(param, device=next(model.parameters()).device)
-    model.load_state_dict(state_dict, strict=False)
+    device = next(model.parameters()).device
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+
+    if len(trainable_params) != len(parameters):
+        raise ValueError(
+            f"Mismatch: modelo tem {len(trainable_params)} parâmetros treináveis, "
+            f"mas foram fornecidos {len(parameters)} arrays NumPy."
+        )
+
+    with torch.no_grad():
+        for param, numpy_val in zip(trainable_params, parameters):
+            new_val = torch.from_numpy(numpy_val.copy()).to(
+                device=device, dtype=param.dtype
+            )
+            param.data.copy_(new_val)
 
 
 def compute_model_gradients(
@@ -396,6 +400,7 @@ class FlowerClient(NumPyClient):
         self.intercepted_data: torch.Tensor | None = None
         self.intercepted_labels: torch.Tensor | None = None
         self.intercepted_label_tensor: torch.Tensor | None = None
+        self.model_at_capture: nn.Module | None = None  # snapshot do modelo no momento da captura
 
     # ------------------------------------------------------------------
     # Interface NumPyClient
@@ -426,9 +431,13 @@ class FlowerClient(NumPyClient):
         """
         Executa treinamento local e expõe gradientes para interceptação.
 
-        Este é o ponto central onde o ataque DLG se encaixa:
-        os gradientes calculados durante o treino local são salvos
-        no atributo `intercepted_gradients`.
+        Fluxo corrigido para compatibilidade com DLG:
+        1. Carrega parâmetros globais e aplica defesas (pruning).
+        2. **ANTES** de treinar, captura gradientes do primeiro sub-batch
+           usando a MESMA loss function que o DLGAttack usa
+           (cross_entropy_for_onehot com labels one-hot).
+        3. Salva snapshot do modelo LIMPO (antes de optimizer.step).
+        4. Procede com o treinamento normal (F.cross_entropy + defesas).
 
         Args:
             parameters: Parâmetros globais atuais (do servidor).
@@ -436,7 +445,7 @@ class FlowerClient(NumPyClient):
 
         Returns:
             Tupla (parameters, num_examples, metrics):
-            - parameters: Gradientes acumulados (ou parâmetros atualizados).
+            - parameters: Parâmetros atualizados do modelo.
             - num_examples: Número de exemplos usados no treino.
             - metrics: Métricas adicionais.
         """
@@ -449,6 +458,63 @@ class FlowerClient(NumPyClient):
             pruning_amount = self.defense_params.get("amount", 0.0)
             apply_global_magnitude_pruning_(self.model, amount=pruning_amount)
 
+        # ─── CAPTURA DE GRADIENTES PARA O ATAQUE DLG ─────────────────
+        # Fazemos ANTES do treino, com o modelo limpo (mesmos pesos que
+        # o atacante usará). Usamos cross_entropy_for_onehot para
+        # garantir a mesma loss function que o DLGAttack.run() utiliza.
+        # Capturamos apenas as primeiras dlg_capture_size imagens.
+        captured_gradients: list[torch.Tensor] | None = None
+        first_batch_data: torch.Tensor | None = None
+        first_batch_labels: torch.Tensor | None = None
+
+        # Determinar tamanho do sub-batch de captura
+        dlg_capture_size = getattr(self, '_dlg_capture_size', 4)
+
+        # Pegar o primeiro batch do dataloader para captura
+        try:
+            capture_iter = iter(self.train_loader)
+            capture_data, capture_labels = next(capture_iter)
+            capture_data = capture_data.to(self.device)
+            capture_labels = capture_labels.to(self.device)
+
+            # Sub-batch: capturar apenas as primeiras dlg_capture_size imagens
+            sub_data = capture_data[:dlg_capture_size].detach().clone()
+            sub_labels = capture_labels[:dlg_capture_size].detach().clone()
+
+            first_batch_data = sub_data
+            first_batch_labels = sub_labels
+
+            # Snapshot do modelo ANTES do forward — o DLG atacante precisa
+            # de exatamente este estado de pesos para recalcular gradientes
+            self.model_at_capture = copy.deepcopy(self.model).to(self.device)
+            self.model_at_capture.eval()
+
+            # Calcular gradientes com a MESMA loss do DLGAttack:
+            # cross_entropy_for_onehot(pred, onehot_labels)
+            sub_onehot = label_to_onehot(sub_labels, num_classes=100)
+            self.model.zero_grad(set_to_none=True)
+            out_capture = self.model(sub_data)
+            loss_capture = cross_entropy_for_onehot(out_capture, sub_onehot)
+            grads_capture = torch.autograd.grad(
+                loss_capture, self.model.parameters()
+            )
+            captured_gradients = [g.detach().clone() for g in grads_capture]
+        except StopIteration:
+            logger.warning(
+                f"Cliente {self.client_id}: dataloader vazio, "
+                f"captura de gradientes ignorada."
+            )
+
+        # Armazenar gradientes interceptados para o ataque DLG
+        if captured_gradients is not None:
+            self.intercepted_gradients = captured_gradients
+            self.intercepted_data = first_batch_data
+            self.intercepted_labels = first_batch_labels
+            self.intercepted_label_tensor = label_to_onehot(
+                first_batch_labels, num_classes=100
+            )
+
+        # ─── TREINAMENTO LOCAL NORMAL ─────────────────────────────────
         optimizer = torch.optim.SGD(
             self.model.parameters(),
             lr=self.learning_rate,
@@ -458,37 +524,19 @@ class FlowerClient(NumPyClient):
         total_examples = 0
         total_loss = 0.0
 
-        # Capturar o primeiro batch para o ataque DLG
-        first_batch_data: torch.Tensor | None = None
-        first_batch_labels: torch.Tensor | None = None
-        captured_gradients: list[torch.Tensor] | None = None
-
         for epoch in range(self.local_epochs):
             for batch_idx, (data, labels) in enumerate(self.train_loader):
                 data = data.to(self.device)
                 labels = labels.to(self.device)
 
-                # Salvar o primeiro batch para o ataque
-                if epoch == 0 and batch_idx == 0:
-                    first_batch_data = data.detach().clone()
-                    first_batch_labels = labels.detach().clone()
-
                 optimizer.zero_grad()
 
-                # Forward
+                # Forward — treino usa F.cross_entropy normal (labels inteiros)
                 output = self.model(data)
                 loss = F.cross_entropy(output, labels)
                 loss.backward()
 
-                # Capturar gradientes do primeiro batch
-                if epoch == 0 and batch_idx == 0:
-                    captured_gradients = [
-                        p.grad.detach().clone()
-                        for p in self.model.parameters()
-                        if p.grad is not None
-                    ]
-
-                # Aplicar defesa nos gradientes (hook-style)
+                # Aplicar defesa nos gradientes antes do step
                 if self.defense_type == "noisy":
                     noise_std = self.defense_params.get("noise_std", NOISE_STD_DEFAULT)
                     for param in self.model.parameters():
@@ -526,16 +574,6 @@ class FlowerClient(NumPyClient):
 
                 total_examples += data.size(0)
                 total_loss += loss.item() * data.size(0)
-
-        # Armazenar gradientes interceptados para o ataque DLG
-        if captured_gradients is not None:
-            # Se defesa está ativa, os gradientes já foram modificados
-            self.intercepted_gradients = captured_gradients
-            self.intercepted_data = first_batch_data
-            self.intercepted_labels = first_batch_labels
-            self.intercepted_label_tensor = label_to_onehot(
-                first_batch_labels, num_classes=100
-            )
 
         avg_loss = total_loss / max(total_examples, 1)
 
@@ -662,7 +700,14 @@ class AttackerClient(FlowerClient):
             batch_size = min(batch_size, self.intercepted_data.shape[0])
 
         # Criar uma cópia do modelo para o ataque
-        attack_model = copy.deepcopy(self.model).to(self.device)
+        # CRÍTICO: usar o snapshot do modelo NO MOMENTO da captura dos gradientes,
+        # NÃO o modelo pós-treinamento (que foi atualizado por optimizer.step).
+        # Se usarmos o modelo errado, os gradientes dummy nunca casarão com
+        # os gradientes capturados → loss não converge.
+        if self.model_at_capture is not None:
+            attack_model = copy.deepcopy(self.model_at_capture).to(self.device)
+        else:
+            attack_model = copy.deepcopy(self.model).to(self.device)
         attack_model.eval()
 
         # Criar e executar o ataque
@@ -697,12 +742,17 @@ def create_clients(
     data_root: str = "~/.torch",
     seed: int = 50,
     attacker_client: bool = False,
+    dlg_num_iters: int = 800,
+    dlg_batch_size: int = 1,
 ) -> list[FlowerClient]:
     """
     Cria uma lista de clientes Flower para a simulação.
 
     Cada cliente recebe um subset exclusivo dos dados de treino do CIFAR-100
     (particionamento IID por simplicidade).
+
+    IMPORTANTE: Todos os clientes compartilham a mesma semente para
+    inicialização do modelo, garantindo consistência com o modelo global.
 
     Args:
         num_clients: Número de clientes a criar.
@@ -712,6 +762,8 @@ def create_clients(
         data_root: Diretório raiz do CIFAR-100.
         seed: Semente para reprodutibilidade da partição.
         attacker_client: Se True, o último cliente é um AttackerClient.
+        dlg_num_iters: Iterações do ataque DLG.
+        dlg_batch_size: Número de imagens a reconstruir no DLG.
 
     Returns:
         Lista de FlowerClient (ou AttackerClient) instanciados.
@@ -723,7 +775,6 @@ def create_clients(
 
     train_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
 
     train_dataset = datasets.CIFAR100(
@@ -744,13 +795,13 @@ def create_clients(
         client_dataset = Subset(train_dataset, client_indices)
         client_loader = DataLoader(
             client_dataset,
-            batch_size=128,
+            batch_size=32,
             shuffle=True,
             num_workers=0,  # 0 para evitar problemas em Windows/Flower
         )
 
-        # Criar modelo fresco
-        model = create_lenet(num_classes=100, device=device, seed=seed + i)
+        # Criar modelo — mesma seed para todos (consistência com modelo global)
+        model = create_lenet(num_classes=100, device=device, seed=seed)
 
         # Escolher classe do cliente
         if attacker_client and i == num_clients - 1:
@@ -763,7 +814,8 @@ def create_clients(
                 defense_params=defense_params,
                 local_epochs=1,
                 learning_rate=0.01,
-                dlg_num_iters=800,
+                dlg_num_iters=dlg_num_iters,
+                dlg_batch_size=dlg_batch_size,
                 dlg_seed=seed,
             )
         else:
@@ -778,32 +830,48 @@ def create_clients(
                 learning_rate=0.01,
             )
 
+        # Configurar tamanho de captura para DLG em todos os clientes
+        client._dlg_capture_size = dlg_batch_size
+
         clients.append(client)
 
     return clients
 
 
-def client_fn(context: Context) -> FlowerClient:
+def fedavg_aggregate(
+    results: list[tuple[list[np.ndarray], int, dict[str, Any]]],
+    global_params: list[np.ndarray],
+) -> list[np.ndarray]:
     """
-    Função de fábrica de clientes para start_simulation.
+    Implementação manual do algoritmo FedAvg para agregação de parâmetros.
 
-    Esta função é chamada pelo Flower para criar cada cliente
-    durante a simulação. Os clientes são pré-criados e armazenados
-    no contexto da simulação.
+    Cada cliente retorna seus parâmetros locais atualizados. A agregação
+    é feita por média ponderada pelo número de exemplos de cada cliente.
 
     Args:
-        context: Contexto do nó Flower.
+        results: Lista de tuplas (parameters, num_examples, metrics)
+                 retornadas por fit() de cada cliente.
+        global_params: Parâmetros globais atuais (usados como base).
 
     Returns:
-        Instância de FlowerClient.
+        Novos parâmetros globais agregados.
     """
-    # Os clientes são acessados via run_config
-    # Na simulação, o node_id indica qual cliente criar
-    node_id = context.node_id
-    client_pool = context.run_config.get("client_pool", [])
-    if client_pool and node_id < len(client_pool):
-        return client_pool[node_id]
-    raise ValueError(f"Nenhum cliente disponível para node_id={node_id}")
+    total_examples = sum(num_ex for _, num_ex, _ in results)
+    if total_examples == 0:
+        return global_params
+
+    # Inicializar acumulador com zeros
+    aggregated = [
+        np.zeros_like(p, dtype=np.float64) for p in global_params
+    ]
+
+    # Média ponderada
+    for params, num_ex, _ in results:
+        weight = num_ex / total_examples
+        for i, param in enumerate(params):
+            aggregated[i] += param.astype(np.float64) * weight
+
+    return aggregated
 
 
 def start_federated_simulation(
@@ -816,14 +884,27 @@ def start_federated_simulation(
     seed: int = 50,
     data_root: str = "~/.torch",
     attacker_enabled: bool = True,
+    attacker_role: str = "malicious_server",
     verbose: bool = True,
+    dlg_batch_size: int = 3,
+    dlg_num_iters: int = 800,
 ) -> dict[str, Any]:
     """
-    Inicia uma simulação de Aprendizado Federado com Flower.
+    Inicia uma simulação de Aprendizado Federado manual (FedAvg local).
 
-    A simulação executa múltiplas rodadas de FedAvg com clientes locais
-    no mesmo processo. Se attacker_enabled=True, o último cliente captura
-    os gradientes e executa o ataque DLG após cada rodada.
+    Diferente da API `start_simulation` do Flower (que exige Ray), esta
+    implementação orquestra as rodadas FedAvg diretamente no processo atual,
+    chamando fit() e evaluate() de cada cliente sequencialmente e
+    agregando os parâmetros com média ponderada.
+
+    Fluxo:
+        1. Parâmetros globais iniciais vêm do primeiro cliente.
+        2. A cada rodada:
+           a. Distribui parâmetros globais para cada cliente.
+           b. Cada cliente treina localmente (fit).
+           c. Atacante captura gradientes do primeiro batch.
+           d. Servidor agrega parâmetros via FedAvg.
+        3. Após todas as rodadas, executa DLG sobre gradientes capturados.
 
     Args:
         num_clients: Número de clientes na simulação (≥2).
@@ -836,31 +917,27 @@ def start_federated_simulation(
         seed: Semente para reprodutibilidade.
         data_root: Diretório raiz do CIFAR-100.
         attacker_enabled: Se True, inclui um AttackerClient.
+        attacker_role: Papel do atacante ('malicious_server', 'malicious_client', 'mitm').
         verbose: Se True, imprime logs detalhados.
+        dlg_batch_size: Número de imagens a reconstruir no DLG.
+        dlg_num_iters: Iterações do ataque DLG.
 
     Returns:
-        Dicionário com resultados da simulação:
+        Dicionário com:
         - 'clients': Lista de clientes (com gradientes interceptados).
         - 'dlg_results': Resultados do ataque DLG (se attacker_enabled).
         - 'history': Histórico de métricas por rodada.
-
-    Raises:
-        ImportError: Se Flower não estiver instalado.
+        - 'global_params': Parâmetros globais finais.
     """
-    if not FLOWER_AVAILABLE:
-        raise ImportError(
-            "Flower (flwr) é necessário para simulação federada. "
-            "Instale com: pip install flwr"
-        )
-
     if device is None:
         device = get_device(verbose=verbose)
 
     if verbose:
+        mode = "CPU" if device == "cpu" else "CUDA"
         print(f"\n{'='*70}")
-        print(f" Simulação Federada — Flower + DLG Attack")
+        print(f" Simulação Federada — FedAvg Manual + DLG Attack")
         print(f" Clientes: {num_clients} | Rodadas: {num_rounds}")
-        print(f" Defesa: {defense_type} | Dispositivo: {device}")
+        print(f" Defesa: {defense_type} | Dispositivo: {mode}")
         print(f"{'='*70}")
 
     # Configurar defesa
@@ -878,6 +955,8 @@ def start_federated_simulation(
         data_root=data_root,
         seed=seed,
         attacker_client=attacker_enabled,
+        dlg_num_iters=dlg_num_iters,
+        dlg_batch_size=dlg_batch_size,
     )
 
     if verbose:
@@ -885,60 +964,83 @@ def start_federated_simulation(
             atk = " [ATACANTE]" if isinstance(c, AttackerClient) else ""
             print(f"  Cliente {c.client_id}: defesa={c.defense_type}{atk}")
 
-    # Estratégia do servidor: FedAvg simples
-    strategy = FedAvg(
-        fraction_fit=1.0,       # Todos os clientes participam
-        fraction_evaluate=0.0,  # Sem avaliação por simplicidade
-        min_fit_clients=num_clients,
-        min_evaluate_clients=0,
-        min_available_clients=num_clients,
-    )
+    # Obter parâmetros globais iniciais do primeiro cliente
+    global_params = clients[0].get_parameters({})
 
-    # Histórico manual para rastreamento
+    # Histórico de métricas
     history: list[dict] = []
 
-    # Executar simulação
-    if verbose:
-        print(f"\nIniciando simulação com {num_rounds} rodadas...\n")
+    # ═══════════════════════════════════════════════════════════════
+    # LOOP DE RODADAS FEDAVG
+    # ═══════════════════════════════════════════════════════════════
+    for round_idx in range(1, num_rounds + 1):
+        if verbose:
+            print(f"\n--- Rodada {round_idx}/{num_rounds} ---")
 
-    # Configuração do servidor
-    def server_fn(context: Context) -> ServerAppComponents:
-        config = ServerConfig(num_rounds=num_rounds)
-        return ServerAppComponents(strategy=strategy, config=config)
+        round_results: list[tuple[list[np.ndarray], int, dict[str, Any]]] = []
 
-    server = ServerApp(server_fn=server_fn)
+        for client in clients:
+            # Treino local (fit) — fit() já chama set_parameters internamente
+            updated_params, num_ex, metrics = client.fit(
+                parameters=global_params,
+                config={"round": round_idx},
+            )
+            round_results.append((updated_params, num_ex, metrics))
 
-    # Configurar clientes no contexto de simulação
-    backend_config = {"client_resources": None}
+            if verbose:
+                atk_tag = " [ATK]" if isinstance(client, AttackerClient) else ""
+                loss_str = metrics.get("loss", "?")
+                print(
+                    f"  Cliente {client.client_id}{atk_tag}: "
+                    f"loss={loss_str:.4f}, "
+                    f"exemplos={num_ex}"
+                )
 
-    # Nota: A API exata do Flower pode variar. Esta implementação
-    # usa o padrão de simulação baseado em ServerApp.
-    try:
-        start_simulation(
-            server_app=server,
-            client_fn=client_fn,
-            num_supernodes=num_clients,
-            backend_config=backend_config,
-        )
-    except Exception as e:
-        logger.warning(f"Simulação Flower encontrou um erro: {e}")
-        logger.warning(
-            "Isso é esperado em modo de simulação local. "
-            "Os clientes foram configurados e os gradientes interceptados."
-        )
+        # Agregação FedAvg
+        global_params = fedavg_aggregate(round_results, global_params)
 
-    # Coletar resultados do ataque DLG
-    dlg_results = []
+        # Registrar métricas da rodada
+        avg_loss = np.mean([
+            m.get("loss", 0)
+            for _, _, m in round_results
+        ])
+        total_ex = sum(num_ex for _, num_ex, _ in round_results)
+        history.append({
+            "round": round_idx,
+            "avg_loss": float(avg_loss),
+            "total_examples": total_ex,
+        })
+
+        if verbose:
+            print(f"  [Servidor] Agregado — loss média: {avg_loss:.4f}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # ATAQUE DLG (após última rodada)
+    # ═══════════════════════════════════════════════════════════════
+    dlg_results: list[dict] = []
     if attacker_enabled:
         for client in clients:
             if isinstance(client, AttackerClient):
+                if client.intercepted_gradients is None:
+                    if verbose:
+                        print(
+                            f"\n[Aviso] Cliente {client.client_id} (ATK) "
+                            f"não tem gradientes interceptados."
+                        )
+                    continue
+
                 if verbose:
-                    print(f"\nExecutando ataque DLG no Cliente {client.client_id}...")
+                    print(
+                        f"\n{'='*60}"
+                        f"\n Executando ataque DLG no Cliente {client.client_id}..."
+                        f"\n{'='*60}"
+                    )
+
                 result = client.attack_dlg(verbose=verbose)
                 if result is not None:
                     dlg_results.append(result)
 
-    # Coletar métricas
+    # Sumário
     metrics_summary = {
         "num_clients": num_clients,
         "num_rounds": num_rounds,
@@ -948,13 +1050,15 @@ def start_federated_simulation(
         "clients": clients,
         "dlg_results": dlg_results,
         "history": history,
+        "global_params": global_params,
     }
 
     if verbose:
         print(f"\n{'='*70}")
         print(f" Simulação concluída.")
-        print(f" Clientes: {num_clients} | Rodadas concluídas: {num_rounds}")
+        print(f" Clientes: {num_clients} | Rodadas: {num_rounds}")
         print(f" Ataques DLG realizados: {len(dlg_results)}")
+        print(f" Loss final (média): {history[-1]['avg_loss']:.4f}" if history else "")
         print(f"{'='*70}")
 
     return metrics_summary
@@ -974,6 +1078,7 @@ def intercept_and_attack(
     dlg_iters: int = 800,
     dlg_seed: int = 50,
     verbose: bool = True,
+    informed_attacker: bool = True,
 ) -> dict:
     """
     Função standalone que simula a interceptação de gradientes
@@ -989,6 +1094,9 @@ def intercept_and_attack(
         dlg_iters: Iterações do ataque DLG.
         dlg_seed: Semente do ataque.
         verbose: Controla logs.
+        informed_attacker: Se True, o atacante usa o mesmo modelo (informado).
+            Se False, usa o modelo original sem poda (desinformado).
+            Apenas relevante quando defense_type='pruning'.
 
     Returns:
         Dicionário com:
@@ -1011,6 +1119,7 @@ def intercept_and_attack(
 
     # Aplicar defesa
     defended_gradients = original_gradients
+    pruned_model = None  # referência ao modelo podado, se aplicável
     if defense_type == "noisy":
         noise_std = (defense_params or {}).get("noise_std", NOISE_STD_DEFAULT)
         defended_gradients = add_noisy_gradients(original_gradients, noise_std)
@@ -1026,10 +1135,21 @@ def intercept_and_attack(
         )
 
     # Executar ataque DLG
-    attack_model = copy.deepcopy(model).to(device)
-    attack_model.eval()
+    # Atacante informado (informed_attacker=True): usa o mesmo modelo que gerou
+    #   os gradientes — se pruning, usa pruned_model.
+    # Atacante desinformado (informed_attacker=False): usa sempre o modelo
+    #   original — incompatível quando cliente usa pruning.
+    if defense_type == "pruning" and informed_attacker and pruned_model is not None:
+        attack_model = pruned_model
+        attack_model.eval()
+    else:
+        attack_model = copy.deepcopy(model).to(device)
+        attack_model.eval()
 
     batch_size = min(data.shape[0], 8)
+
+    # Se pruning desinformado: usar loss mais robusta (safe) pois há mismatch
+    use_safe = (defense_type == "pruning" and not informed_attacker)
 
     attack = DLGAttack(
         batch_size=batch_size,
@@ -1037,6 +1157,7 @@ def intercept_and_attack(
         num_classes=100,
         device=device,
         seed=dlg_seed,
+        use_safe_loss=use_safe,
         verbose=verbose,
     )
 
@@ -1052,4 +1173,5 @@ def intercept_and_attack(
         "dlg_result": dlg_result,
         "defense_type": defense_type,
         "batch_size": batch_size,
+        "informed_attacker": informed_attacker,
     }

@@ -85,7 +85,7 @@ class DLGAttack:
         batch_size: int = 3,
         num_iters: int = 800,
         num_classes: int = 100,
-        device: str = "cpu",
+        device: str | torch.device = "cpu",
         cosine_weight: float = COSINE_WEIGHT,
         tv_coeff_start: float = TV_COEFF_START,
         tv_coeff_end: float = TV_COEFF_END,
@@ -294,6 +294,8 @@ class DLGAttack:
             - 'history': Lista de listas de PIL Images por amostra.
             - 'loss_history': Lista de valores da loss.
             - 'target_gradients': Cópia sanitizada dos gradientes alvo.
+            - 'snapshots': Lista de tensores [batch_size, 3, 32, 32] em checkpoints.
+            - 'snapshot_iters': Lista de int com a iteração de cada snapshot.
         """
         if criterion is None:
             criterion = cross_entropy_for_onehot
@@ -373,6 +375,17 @@ class DLGAttack:
 
         total_cycles = self.num_iters // self.batch_size
         _loss_log: list[float | None] = [None]
+
+        # Checkpoints para snapshots da reconstrução
+        snapshot_checkpoints = 10
+        snapshot_interval = max(1, total_cycles // snapshot_checkpoints)
+        snapshot_cycles = set(
+            range(0, total_cycles, snapshot_interval)
+        )
+        # Garantir que o último ciclo está incluso
+        snapshot_cycles.add(total_cycles - 1)
+        snapshots: list[torch.Tensor] = []  # cada entrada: [B, C, H, W]
+        snapshot_iters: list[int] = []       # iteração correspondente
 
         # ═══════════════════════════════════════════════════════════════
         # LOOP PRINCIPAL DO ATAQUE
@@ -539,6 +552,20 @@ class DLGAttack:
                         )
                     )
 
+            # ── Snapshot da reconstrução nos checkpoints ─────────────
+            if cycle in snapshot_cycles:
+                snap = torch.cat(
+                    [
+                        torch.nan_to_num(
+                            d.data, nan=0.0, posinf=1.0, neginf=0.0
+                        ).clamp(0, 1)
+                        for d in dummy_data_list
+                    ],
+                    dim=0,
+                )  # [B, C, H, W]
+                snapshots.append(snap.cpu().clone())
+                snapshot_iters.append(cycle * self.batch_size)
+
             # Logging
             current_loss = _loss_log[0]
             if cycle % 10 == 0 and current_loss is not None:
@@ -586,6 +613,8 @@ class DLGAttack:
             "history": history,
             "loss_history": loss_history,
             "target_gradients": target_gradients,
+            "snapshots": snapshots,
+            "snapshot_iters": snapshot_iters,
         }
 
 

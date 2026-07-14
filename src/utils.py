@@ -26,20 +26,71 @@ from torchvision import datasets, transforms
 # Dispositivo e Reprodutibilidade
 # ---------------------------------------------------------------------------
 
-def get_device(verbose: bool = True) -> str:
+def get_device(verbose: bool = True) -> torch.device:
     """
-    Detecta o dispositivo disponível: 'cuda' se GPU disponível, senão 'cpu'.
+    Detecta o melhor dispositivo disponível para computação.
+
+    Ordem de prioridade:
+        1. CUDA (NVIDIA GPU) — melhor performance
+        2. CPU — default seguro; para modelos pequenos como LeNet,
+           CPU é frequentemente mais rápida que aceleradores via
+           fallback (DirectML/MPS sofrem com overhead de transferência
+           em operações não suportadas nativamente).
+        3. DirectML (AMD/Intel GPU) — ative com DLG_USE_DML=1
+        4. MPS (Apple Silicon) — ative com DLG_USE_MPS=1
 
     Args:
         verbose: Se True, imprime o dispositivo selecionado.
 
     Returns:
-        String identificando o dispositivo ('cuda' ou 'cpu').
+        torch.device para o dispositivo selecionado.
     """
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    import os
+
+    # CUDA sempre tem prioridade máxima
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        label = "CUDA"
+    elif os.environ.get("DLG_USE_DML") == "1":
+        try:
+            import torch_directml  # type: ignore[import-untyped]
+            if torch_directml.is_available():
+                device = torch_directml.device()
+                label = "DirectML (AMD/Intel GPU)"
+            else:
+                device = torch.device("cpu")
+                label = "CPU (fallback — DirectML indisponível)"
+        except ImportError:
+            device = torch.device("cpu")
+            label = "CPU (fallback — torch-directml não instalado)"
+    elif os.environ.get("DLG_USE_MPS") == "1":
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = torch.device("mps")
+            label = "MPS (Apple Silicon)"
+        else:
+            device = torch.device("cpu")
+            label = "CPU (fallback — MPS indisponível)"
+    else:
+        device = torch.device("cpu")
+        label = "CPU"
+
     if verbose:
-        print(f"[utils] Running on {device.upper()}")
+        print(f"[utils] Running on {label}")
     return device
+
+
+def get_device_str(verbose: bool = True) -> str:
+    """
+    Retorna o nome do dispositivo como string para uso em APIs/relatórios.
+
+    Returns:
+        'cuda', 'dml', 'mps', ou 'cpu'.
+    """
+    dev = get_device(verbose=verbose)
+    t = dev.type
+    if t == "privateuseone":
+        return "dml"
+    return t
 
 
 def set_seed(seed: int) -> None:

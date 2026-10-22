@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   icon?: ReactNode;
@@ -30,10 +30,11 @@ export function Button({
   };
 
   const variants = {
-    primary:
-      "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 hover:shadow-emerald-500/30",
+    primary: "bg-[#172b36] hover:bg-[#294553] text-white",
     secondary:
       "bg-graphite-800 hover:bg-graphite-700 text-graphite-200 border border-graphite-700/50",
+    outline:
+      "bg-transparent hover:bg-graphite-800/50 text-graphite-300 border border-graphite-700/50",
     ghost:
       "bg-transparent hover:bg-graphite-800/50 text-graphite-400 hover:text-graphite-200",
     danger:
@@ -42,14 +43,15 @@ export function Button({
 
   return (
     <button
+      data-variant={variant}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-200",
+        "inline-flex items-center justify-center rounded-md font-medium transition-colors duration-150 lab-button",
         "focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2 focus:ring-offset-graphite-950",
         "disabled:cursor-not-allowed disabled:opacity-50",
         sizes[size],
         variants[variant],
-        className
+        className,
       )}
       {...rest}
     >

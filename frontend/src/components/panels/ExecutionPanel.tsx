@@ -2,7 +2,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Terminal, type LogLine } from "@/components/ui/Terminal";
-import type { AttackConfig, AttackResponse } from "@/lib/types";
+import type { AttackConfig } from "@/lib/types";
 import { Play, Square, Shield, Zap } from "lucide-react";
 
 interface ExecutionPanelProps {
@@ -29,9 +29,7 @@ export function ExecutionPanel({
   const envLabel =
     config.environment === "federated" ? "Federado (Flower)" : "Centralizado";
   const defenseLabel =
-    config.defense === "none"
-      ? "Sem defesa"
-      : `Defesa: ${config.defense}`;
+    config.defense === "none" ? "Sem defesa" : `Defesa: ${config.defense}`;
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -43,7 +41,8 @@ export function ExecutionPanel({
               {isRunning ? "Ataque em Execução" : "Pronto para Iniciar"}
             </h3>
             <p className="mt-1 text-sm text-graphite-400">
-              {envLabel} · Batch {config.batchSize} · {config.numIters} iterações · {defenseLabel}
+              {envLabel} · Batch {config.batchSize} · {config.numIters}{" "}
+              iterações · {defenseLabel}
             </p>
           </div>
 
@@ -55,7 +54,7 @@ export function ExecutionPanel({
                 icon={<Square className="h-4 w-4" />}
                 onClick={onAbort}
               >
-                Abortar
+                Cancelar espera
               </Button>
             ) : (
               <Button
@@ -76,10 +75,11 @@ export function ExecutionPanel({
             <ProgressBar
               value={progress}
               size="lg"
-              label="Progresso da Otimização"
+              label="Progresso estimado no navegador"
             />
             <p className="mt-2 text-center text-xs text-graphite-500">
-              Otimização LBFGS com round-robin + fase global · TV adaptativo · Cosine annealing
+              Estimativa local, sem telemetria de iterações. Cancelar a espera
+              não garante interromper o servidor.
             </p>
           </div>
         )}
@@ -114,7 +114,7 @@ export function ExecutionPanel({
             className="rounded-xl border border-graphite-800/60 bg-graphite-900/40 p-4 text-center"
           >
             <stat.icon className="mx-auto mb-1.5 h-4 w-4 text-graphite-500" />
-            <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+            <p className="text-[10px] font-medium  text-graphite-500">
               {stat.label}
             </p>
             <p className="mt-0.5 text-sm font-semibold text-white">
@@ -124,6 +124,10 @@ export function ExecutionPanel({
         ))}
       </div>
 
+      <p className="text-sm text-graphite-400">
+        As etapas explicativas abaixo ilustram o algoritmo. Apenas a resposta
+        final confirma o resultado da execução.
+      </p>
       {/* Terminal de Logs */}
       <Terminal
         logs={logs}

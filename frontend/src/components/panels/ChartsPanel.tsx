@@ -1,6 +1,10 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import type { AttackResponse, ChartDataPoint, DefenseChartDataPoint } from "@/lib/types";
+import type {
+  AttackResponse,
+  ChartDataPoint,
+  DefenseChartDataPoint,
+} from "@/lib/types";
 import { fmt } from "@/lib/utils";
 import {
   ResponsiveContainer,
@@ -23,10 +27,10 @@ interface ChartsPanelProps {
 }
 
 // Cores do tema
-const EMERALD_MAIN = "#10b981";
-const EMERALD_MUTED = "#34d399";
-const GRAPHITE_GRID = "#3a424e";
-const GRAPHITE_TEXT = "#68778a";
+const EMERALD_MAIN = "#1b6c80";
+const EMERALD_MUTED = "#2f70bb";
+const GRAPHITE_GRID = "#e4e9ec";
+const GRAPHITE_TEXT = "#526570";
 
 /**
  * Step 4 — Gráficos de Análise Avançada.
@@ -60,8 +64,8 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 Nenhum Gráfico Disponível
               </h3>
               <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Execute o ataque DLG para visualizar a curva de convergência
-                e a comparação de defesas.
+                Execute o ataque DLG para visualizar a curva de convergência e a
+                comparação de defesas.
               </p>
             </div>
           </div>
@@ -102,7 +106,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
       ]
     : [
         {
-          name: "Sem Defesa",
+          name: "Esta execução",
           ssim: safe(response.metrics?.ssimMean ?? 0, 0),
           psnr: safe(response.metrics?.psnrMean ?? 0, 0),
           mse: safe(response.metrics?.mseMean ?? 0, 0),
@@ -116,9 +120,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
         <CardHeader
           title="Curva de Convergência (Loss Decay)"
           subtitle={`${lossData.length} pontos · Escala logarítmica`}
-          action={
-            <TrendingDown className="h-5 w-5 text-emerald-500" />
-          }
+          action={<TrendingDown className="h-5 w-5 text-emerald-500" />}
         />
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -160,16 +162,14 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#0e1014",
+                  backgroundColor: "#ffffff",
                   border: "1px solid #3a424e",
                   borderRadius: "12px",
-                  color: "#eaecef",
+                  color: "#172b36",
                   fontSize: "12px",
                 }}
                 formatter={(value: number) => [fmt(value, 6), "Loss"]}
-                labelFormatter={(label: number) =>
-                  `Iteração ${label}`
-                }
+                labelFormatter={(label: number) => `Iteração ${label}`}
               />
               <Line
                 type="monotone"
@@ -180,10 +180,10 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 activeDot={{
                   r: 5,
                   fill: EMERALD_MUTED,
-                  stroke: "#0e1014",
+                  stroke: "#ffffff",
                   strokeWidth: 2,
                 }}
-                animationDuration={1500}
+                isAnimationActive={false}
                 animationEasing="ease-out"
               />
             </LineChart>
@@ -230,10 +230,10 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#0e1014",
+                  backgroundColor: "#ffffff",
                   border: "1px solid #3a424e",
                   borderRadius: "12px",
-                  color: "#eaecef",
+                  color: "#172b36",
                   fontSize: "12px",
                 }}
               />
@@ -250,7 +250,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 {defenseData.map((_, idx) => (
                   <Cell
                     key={idx}
-                    fill={idx === 0 ? EMERALD_MAIN : "#f59e0b"}
+                    fill={idx === 0 ? EMERALD_MAIN : "#a86f0c"}
                     fillOpacity={idx === 0 ? 1 : 0.7}
                   />
                 ))}
@@ -261,7 +261,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
         <p className="mt-3 text-center text-xs text-graphite-500">
           {hasPenalty
             ? `Δ SSIM: ${penalty.deltaSsim >= 0 ? "+" : ""}${fmt(penalty.deltaSsim, 4)} · Uma defesa eficaz reduz SSIM`
-            : "Execute múltiplos cenários para comparar impacto de diferentes defesas"}
+            : "Esta execução não contém uma comparação pareada com e sem defesa."}
         </p>
       </Card>
     </div>

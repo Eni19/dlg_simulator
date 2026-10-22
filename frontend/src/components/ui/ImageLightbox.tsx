@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 interface ImageLightboxProps {
   images: string[];
@@ -23,6 +23,7 @@ export function ImageLightbox({
   onNext,
 }: ImageLightboxProps) {
   const hasMultiple = images.length > 1;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Teclas
   const handleKeyDown = useCallback(
@@ -35,6 +36,31 @@ export function ImageLightbox({
   );
 
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const buttons =
+        dialogRef.current?.querySelectorAll<HTMLButtonElement>("button");
+      if (!buttons?.length) return;
+      const first = buttons[0],
+        last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      document.removeEventListener("keydown", trapFocus);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
     return () => {
@@ -45,13 +71,17 @@ export function ImageLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-fade-in"
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Visualização ampliada da reconstrução"
+      className="image-lightbox fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-fade-in"
       onClick={onClose}
     >
       {/* Fechar */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-all hover:bg-graphite-700 hover:text-white"
+        className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-colors hover:bg-graphite-700 hover:text-white"
         aria-label="Fechar zoom"
       >
         <X className="h-5 w-5" />
@@ -64,7 +94,7 @@ export function ImageLightbox({
             e.stopPropagation();
             onPrev();
           }}
-          className="absolute left-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-all hover:bg-graphite-700 hover:text-white"
+          className="absolute left-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-colors hover:bg-graphite-700 hover:text-white"
           aria-label="Anterior"
         >
           <ChevronLeft className="h-6 w-6" />
@@ -79,7 +109,7 @@ export function ImageLightbox({
         <img
           src={`data:image/png;base64,${images[currentIndex]}`}
           alt={labels?.[currentIndex] ?? `Imagem ${currentIndex + 1}`}
-          className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl"
+          className="max-w-full max-h-[80vh] rounded-xl object-contain "
         />
         {labels && (
           <p className="mt-3 text-sm font-medium text-graphite-300">
@@ -92,10 +122,8 @@ export function ImageLightbox({
             {images.map((_, i) => (
               <span
                 key={i}
-                className={`inline-block h-1.5 w-1.5 rounded-full transition-all ${
-                  i === currentIndex
-                    ? "bg-emerald-400 w-4"
-                    : "bg-graphite-600"
+                className={`inline-block h-1.5 w-1.5 rounded-full transition-colors ${
+                  i === currentIndex ? "bg-emerald-400 w-4" : "bg-graphite-600"
                 }`}
               />
             ))}
@@ -110,7 +138,7 @@ export function ImageLightbox({
             e.stopPropagation();
             onNext();
           }}
-          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-all hover:bg-graphite-700 hover:text-white"
+          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-graphite-800/80 text-graphite-300 transition-colors hover:bg-graphite-700 hover:text-white"
           aria-label="Próximo"
         >
           <ChevronRight className="h-6 w-6" />

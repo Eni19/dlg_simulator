@@ -3,3 +3,6 @@ __pycache__/
 .vite/
 dist/
 *.pyc
+.taste-skill/
+.impeccable/
+.venv/

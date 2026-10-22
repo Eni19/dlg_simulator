@@ -3,7 +3,14 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { Slider } from "@/components/ui/Slider";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import type { AttackConfig } from "@/lib/types";
 import { PieChart, Loader2, Database } from "lucide-react";
 
@@ -36,7 +43,8 @@ export function DataDistributionPanel({
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.detail || "Erro ao buscar distribuição");
+      if (!res.ok)
+        throw new Error(json.detail || "Erro ao buscar distribuição");
 
       // Transform data for Recharts
       // Input: { "Cliente 0": { "0": 10, "1": 5 }, "Cliente 1": ... }
@@ -47,7 +55,7 @@ export function DataDistributionPanel({
             name: clientName,
             ...counts,
           };
-        }
+        },
       );
       setData(formatted);
     } catch (err: any) {
@@ -64,7 +72,7 @@ export function DataDistributionPanel({
 
   // Lista única de classes (0-99)
   const classes = Array.from({ length: 100 }, (_, i) => i.toString());
-  
+
   // Cores dinâmicas para as classes
   const getColor = (i: number) => `hsl(${(i * 137.5) % 360}, 70%, 50%)`;
 
@@ -82,7 +90,7 @@ export function DataDistributionPanel({
       <div className="space-y-6">
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <p className="mb-2 text-xs font-semibold text-graphite-400 uppercase tracking-wider">
+            <p className="mb-2 text-xs font-semibold text-graphite-400 ">
               Tipo de Particionamento
             </p>
             <Toggle
@@ -161,20 +169,32 @@ export function DataDistributionPanel({
                       color: "#d4d4d4",
                     }}
                     itemStyle={{ fontSize: "12px" }}
-                    labelStyle={{ fontWeight: "bold", marginBottom: "8px", color: "#fff" }}
+                    labelStyle={{
+                      fontWeight: "bold",
+                      marginBottom: "8px",
+                      color: "#fff",
+                    }}
                     // Limita a exibição do tooltip para não estourar a tela com 100 classes
-                    formatter={(value: number, name: string) => [value, `Classe ${name}`]}
+                    formatter={(value: number, name: string) => [
+                      value,
+                      `Classe ${name}`,
+                    ]}
                     filterNull={false}
                   />
                   {classes.map((cls, i) => (
-                    <Bar key={cls} dataKey={cls} stackId="a" fill={getColor(i)} />
+                    <Bar
+                      key={cls}
+                      dataKey={cls}
+                      stackId="a"
+                      fill={getColor(i)}
+                    />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <p className="mt-4 text-xs text-graphite-500 text-center">
               Cada cor representa uma das 100 classes do CIFAR-100.
-              {config.partitionerType === "iid" 
+              {config.partitionerType === "iid"
                 ? " No particionamento IID, as cores são distribuídas uniformemente."
                 : " No particionamento Dirichlet, os clientes possuem focos em classes específicas (Non-IID)."}
             </p>

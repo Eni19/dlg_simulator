@@ -13,7 +13,11 @@ interface SkeletonProps {
  * Usado durante a execução do ataque DLG para indicar
  * que os resultados estão sendo processados.
  */
-export function Skeleton({ className, variant = "line", lines = 3 }: SkeletonProps) {
+export function Skeleton({
+  className,
+  variant = "line",
+  lines = 3,
+}: SkeletonProps) {
   const base = "animate-pulse rounded-lg bg-graphite-800/60";
 
   if (variant === "circle") {
@@ -26,7 +30,12 @@ export function Skeleton({ className, variant = "line", lines = 3 }: SkeletonPro
 
   if (variant === "card") {
     return (
-      <div className={cn("rounded-2xl border border-graphite-800 bg-graphite-900/50 p-6", className)}>
+      <div
+        className={cn(
+          "rounded-2xl border border-graphite-800 bg-graphite-900/50 p-6",
+          className,
+        )}
+      >
         <div className={cn(base, "mb-4 h-4 w-2/3")} />
         <div className="space-y-3">
           <div className={cn(base, "h-3 w-full")} />

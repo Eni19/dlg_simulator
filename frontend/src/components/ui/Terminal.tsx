@@ -61,8 +61,8 @@ export function Terminal({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-graphite-800 bg-[#0a0d11] shadow-2xl",
-        className
+        "overflow-hidden rounded-2xl border border-graphite-800 bg-[#0a0d11] ",
+        className,
       )}
     >
       {/* Header do Terminal */}
@@ -79,7 +79,9 @@ export function Terminal({
         {isRunning && (
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-[11px] font-medium text-emerald-500">RUNNING</span>
+            <span className="text-[11px] font-medium text-emerald-500">
+              RUNNING
+            </span>
           </div>
         )}
       </div>
@@ -87,7 +89,7 @@ export function Terminal({
       {/* Corpo do Terminal */}
       <div
         ref={scrollRef}
-        className="h-72 overflow-y-auto p-4 font-mono text-xs leading-relaxed"
+        className="h-72 overflow-y-auto p-4 tabular-nums text-xs leading-relaxed"
       >
         {visibleLogs.length === 0 && (
           <div className="flex h-full items-center justify-center">
@@ -101,7 +103,7 @@ export function Terminal({
             key={line.id}
             className={cn(
               "flex gap-2 transition-opacity duration-300",
-              lineColor(line.type)
+              lineColor(line.type),
             )}
           >
             <span className="select-none text-graphite-700">›</span>
@@ -119,5 +121,3 @@ export function Terminal({
     </div>
   );
 }
-
-

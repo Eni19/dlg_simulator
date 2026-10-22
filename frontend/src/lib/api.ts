@@ -218,6 +218,7 @@ export async function runFederated(
   const payload: Record<string, unknown> = {
     num_clients: config.flClients,
     num_rounds: config.flRounds,
+    attacker_role: config.attackerRole,
     defense_type: config.defense,
     noise_std: config.defenseParams.noiseStd,
     keep_ratio: config.defenseParams.keepRatio,

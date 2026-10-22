@@ -1,33 +1,63 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  lazy,
+  Suspense,
+} from "react";
 import type { AttackConfig, AttackResponse } from "@/lib/types";
 import { DEFAULT_CONFIG } from "@/lib/types";
 import type { LogLine } from "@/components/ui/Terminal";
-import { runAttack, runFederated } from "@/lib/api";
+import { checkHealth, runAttack, runFederated } from "@/lib/api";
 import { uid } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { SetupPanel } from "@/components/panels/SetupPanel";
 import { ExecutionPanel } from "@/components/panels/ExecutionPanel";
 import { ResultsPanel } from "@/components/panels/ResultsPanel";
-import { ChartsPanel } from "@/components/panels/ChartsPanel";
 import { FederatedFlowPanel } from "@/components/panels/FederatedFlowPanel";
+import { LearningPanel } from "@/components/panels/LearningPanel";
 import {
-  Settings,
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  SlidersHorizontal,
   Play,
-  BarChart3,
-  Image,
-  FlaskConical,
-  Shield,
+  ScanLine,
+  ChartNoAxesCombined,
+  Code2,
   Github,
+  Menu,
+  X,
+  RotateCcw,
+  Square,
 } from "lucide-react";
 
-type ActiveTab = "setup" | "execute" | "results" | "charts";
-type RunState = "idle" | "running" | "success" | "error";
+const SetupPanel = lazy(() =>
+  import("@/components/panels/SetupPanel").then((module) => ({
+    default: module.SetupPanel,
+  })),
+);
+const ChartsPanel = lazy(() =>
+  import("@/components/panels/ChartsPanel").then((module) => ({
+    default: module.ChartsPanel,
+  })),
+);
+const CodePanel = lazy(() =>
+  import("@/components/panels/CodePanel").then((module) => ({
+    default: module.CodePanel,
+  })),
+);
 
-const TABS: { key: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: "setup", label: "Configuração", icon: Settings },
-  { key: "execute", label: "Execução", icon: Play },
-  { key: "results", label: "Resultados", icon: Image },
-  { key: "charts", label: "Gráficos", icon: BarChart3 },
+type ActiveTab =
+  "overview" | "setup" | "execute" | "results" | "charts" | "code";
+type RunState = "idle" | "running" | "success" | "error";
+const TABS = [
+  { key: "overview" as const, label: "Visão geral", icon: BookOpen },
+  { key: "setup" as const, label: "Experimento", icon: SlidersHorizontal },
+  { key: "execute" as const, label: "Execução", icon: Play },
+  { key: "results" as const, label: "Reconstruções", icon: ScanLine },
+  { key: "charts" as const, label: "Análise", icon: ChartNoAxesCombined },
+  { key: "code" as const, label: "Código", icon: Code2 },
 ];
 
 /** Sanitiza um número para evitar Infinity/NaN que quebram a UI */
@@ -68,7 +98,12 @@ function sanitizeResponse(res: AttackResponse): AttackResponse {
  * Dashboard principal — coordena os 4 steps do fluxo DLG.
  */
 export function Dashboard() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("setup");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const hash = window.location.hash.slice(1);
+    return TABS.some((tab) => tab.key === hash)
+      ? (hash as ActiveTab)
+      : "overview";
+  });
   const [config, setConfig] = useState<AttackConfig>({ ...DEFAULT_CONFIG });
 
   const [runState, setRunState] = useState<RunState>("idle");
@@ -77,6 +112,32 @@ export function Dashboard() {
   const [response, setResponse] = useState<AttackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [health, setHealth] = useState<"checking" | "online" | "offline">(
+    "checking",
+  );
+  const [device, setDevice] = useState("");
+  useEffect(() => {
+    let live = true;
+    checkHealth()
+      .then((result) => {
+        if (live) {
+          setHealth("online");
+          setDevice(result.device);
+        }
+      })
+      .catch(() => {
+        if (live) setHealth("offline");
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const navigate = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
   const abortRef = useRef<AbortController | null>(null);
   const logSimRef = useRef<number | null>(null);
   const progressRef = useRef<number | null>(null);
@@ -86,15 +147,24 @@ export function Dashboard() {
     return () => {
       if (logSimRef.current) clearInterval(logSimRef.current);
       if (progressRef.current) clearInterval(progressRef.current);
+      abortRef.current?.abort();
     };
   }, []);
 
-  const addLog = useCallback((entry: { text: string; type?: LogLine["type"] }) => {
-    setLogs((prev) => [
-      ...prev,
-      { id: uid(), text: entry.text, type: entry.type ?? "info", timestamp: Date.now() },
-    ]);
-  }, []);
+  const addLog = useCallback(
+    (entry: { text: string; type?: LogLine["type"] }) => {
+      setLogs((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          text: entry.text,
+          type: entry.type ?? "info",
+          timestamp: Date.now(),
+        },
+      ]);
+    },
+    [],
+  );
 
   /** Processa a resposta do backend */
   const handleResponse = useCallback(
@@ -108,13 +178,14 @@ export function Dashboard() {
 
       if (!res.success) {
         setError(res.message || "Erro desconhecido");
-        addLog({ text: `✕ Falha: ${res.message}`, type: "error" });
+        addLog({ text: `Falha: ${res.message}`, type: "error" });
       } else {
         const psnr = res.metrics?.psnrMean;
-        const psnrStr = (psnr != null && isFinite(psnr)) ? psnr.toFixed(1) : "N/A";
+        const psnrStr =
+          psnr != null && isFinite(psnr) ? psnr.toFixed(1) : "N/A";
         const lossCount = res.lossHistory?.length ?? 0;
         addLog({
-          text: `✓ Ataque concluído — PSNR médio: ${psnrStr} dB (${lossCount} amostras de loss)`,
+          text: `Ataque concluído — PSNR médio: ${psnrStr} dB (${lossCount} amostras de loss)`,
           type: "success",
         });
         setActiveTab("results");
@@ -147,7 +218,8 @@ export function Dashboard() {
       });
     }
 
-    abortRef.current = new AbortController();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     // Simulador de logs
     const simMessages = [
@@ -164,14 +236,19 @@ export function Dashboard() {
     let msgIdx = 0;
     logSimRef.current = window.setInterval(() => {
       if (msgIdx < simMessages.length) {
-        addLog({ text: simMessages[msgIdx], type: "metric" });
+        addLog({
+          text: `Sobre o algoritmo (etapa ilustrativa): ${simMessages[msgIdx]}`,
+          type: "info",
+        });
         msgIdx++;
       }
     }, 2500);
 
     // Barra de progresso baseada nos ciclos do ataque
     // Para DLG centralizado, estima-se baseado nos ciclos e iterações.
-    const totalCycles = Math.floor(config.numIters / Math.max(config.batchSize, 1));
+    const totalCycles = Math.floor(
+      config.numIters / Math.max(config.batchSize, 1),
+    );
     const msPerCycle = 220; // estimativa realista para CPU
     let estimatedDurationMs = totalCycles * msPerCycle;
 
@@ -191,7 +268,10 @@ export function Dashboard() {
     progressRef.current = window.setInterval(() => {
       const elapsed = Date.now() - t0;
       // Crescimento assintótico suave até 95% para não travar nos 90%
-      const pct = Math.min(95, Math.round((elapsed / estimatedDurationMs) * 100));
+      const pct = Math.min(
+        95,
+        Math.round((elapsed / estimatedDurationMs) * 100),
+      );
       setProgress(pct);
     }, 200);
 
@@ -203,20 +283,24 @@ export function Dashboard() {
           text: `Simulação Federada: ${config.flClients} clientes, ${config.flRounds} rodadas`,
           type: "info",
         });
-        rawRes = await runFederated(config, abortRef.current.signal);
+        rawRes = await runFederated(config, controller.signal);
       } else {
-        rawRes = await runAttack(config, abortRef.current.signal);
+        rawRes = await runAttack(config, controller.signal);
       }
 
-      handleResponse(rawRes);
+      if (!controller.signal.aborted) handleResponse(sanitizeResponse(rawRes));
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       if (logSimRef.current) clearInterval(logSimRef.current);
       if (progressRef.current) clearInterval(progressRef.current);
       setProgress(0);
 
       if (err instanceof Error && err.name === "AbortError") {
         setRunState("idle");
-        addLog({ text: "Ataque abortado pelo usuário", type: "warn" });
+        addLog({
+          text: "Espera cancelada no navegador. O servidor pode continuar processando.",
+          type: "warn",
+        });
         return;
       }
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -233,165 +317,378 @@ export function Dashboard() {
     if (progressRef.current) clearInterval(progressRef.current);
     setRunState("idle");
     setProgress(0);
-    addLog({ text: "Ataque abortado pelo usuário", type: "warn" });
+    addLog({
+      text: "Espera cancelada no navegador. O servidor pode continuar processando.",
+      type: "warn",
+    });
   }, [addLog]);
 
+  const tabTitle = TABS.find((tab) => tab.key === activeTab)?.label;
+  const defenseLabels = {
+    none: "Sem defesa",
+    noisy: "Ruído gaussiano",
+    sparse: "Esparsificação",
+    pruning: "Poda do modelo",
+  };
   return (
-    <div className="min-h-screen bg-graphite-950 text-graphite-100">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-graphite-800/60 bg-graphite-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600/20 ring-1 ring-emerald-500/30">
-              <Shield className="h-5 w-5 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-white">
-                DLG Attack
-              </h1>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
-                Deep Leakage from Gradients
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <a
-              href="https://flower.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg px-3 py-1.5 text-xs text-graphite-500 transition-colors hover:text-graphite-300 hover:bg-graphite-800/50"
-            >
-              Flower.ai
-            </a>
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-graphite-500 transition-colors hover:text-graphite-300 hover:bg-graphite-800/50"
-            >
-              <Github className="h-3.5 w-3.5" />
-              GitHub
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* Navegação de Abas */}
-      <nav className="sticky top-[57px] z-30 border-b border-graphite-800/60 bg-graphite-950/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex gap-1 overflow-x-auto">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.key;
-              const isComplete =
-                (tab.key === "setup" && response !== null) ||
-                (tab.key === "execute" && (runState === "running" || response !== null)) ||
-                (tab.key === "results" && response !== null) ||
-                (tab.key === "charts" && response !== null);
-
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "border-emerald-500 text-emerald-400"
-                      : isComplete
-                        ? "border-transparent text-graphite-400 hover:text-graphite-200"
-                        : "border-transparent text-graphite-600"
-                  }`}
-                >
-                  <Icon
-                    className={`h-4 w-4 ${isActive ? "text-emerald-400" : ""}`}
-                  />
-                  {tab.label}
-                  {isActive && (
-                    <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
-
-      {/* Conteúdo Principal */}
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        {/* Banner de Erro Global */}
-        {runState === "error" && error && (
-          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-600/10 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600/20">
-                <FlaskConical className="h-4 w-4 text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-red-400">
-                  Erro na Execução
-                </p>
-                <p className="mt-0.5 text-xs text-graphite-400">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 1 — Setup */}
-        {activeTab === "setup" && (
-          <ErrorBoundary>
-            <SetupPanel config={config} onChange={setConfig} isRunning={runState === "running"} />
-          </ErrorBoundary>
-        )}
-
-        {/* Step 2 — Execução */}
-        {activeTab === "execute" && (
-          <ErrorBoundary>
-            <ExecutionPanel
-              config={config}
-              isRunning={runState === "running"}
-              logs={logs}
-              progress={progress}
-              onStart={handleStart}
-              onAbort={handleAbort}
+    <div className="lab-shell">
+      <a className="skip-link" href="#main-content">
+        Pular para o conteúdo
+      </a>
+      <aside
+        className={`lab-sidebar ${menuOpen ? "is-open" : ""}`}
+        aria-label="Navegação principal"
+      >
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("overview");
+          }}
+        >
+          <svg viewBox="0 0 36 36" width="32" height="32" aria-hidden="true">
+            <path
+              d="M4 9h9v9H4zm19 0h9v9h-9zM13 23h10v9H13z"
+              fill="currentColor"
             />
-            {/* Fluxo Federado: explicação visual quando ambiente federado */}
-            {config.environment === "federated" && (
-              <div className="mt-5">
-                <FederatedFlowPanel config={config} isRunning={runState === "running"} />
+            <path
+              d="m13 14 10 0M9 18l9 10 9-10"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            />
+          </svg>
+          <span>
+            DLG<span className="brand-light"> / lab</span>
+          </span>
+        </a>
+        <button
+          className="mobile-close"
+          aria-label="Fechar navegação"
+          onClick={() => setMenuOpen(false)}
+        >
+          <X size={20} />
+        </button>
+        <div className="project-label">
+          <span>Deep Leakage from Gradients</span>
+          <small>Um experimento em privacidade</small>
+        </div>
+        <nav>
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                aria-current={activeTab === tab.key ? "page" : undefined}
+                className={`sidebar-link ${activeTab === tab.key ? "active" : ""}`}
+                onClick={() => navigate(tab.key)}
+              >
+                <Icon size={18} />
+                <span>{tab.label}</span>
+                {tab.key === "execute" && runState === "running" && (
+                  <span className="status-dot running" />
+                )}
+                {tab.key === "results" && response?.success && (
+                  <span className="result-dot" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="model-note">
+            <span>O experimento</span>
+            <strong>CIFAR-100 + LeNet</strong>
+            <small>Imagens 32 × 32 · 100 classes</small>
+          </div>
+          <a
+            href="https://github.com/Eni19/dlg_simulator"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Github size={16} /> Repositório <ArrowUpRight size={14} />
+          </a>
+          <span className="author-note">Projeto de Enrique Susin</span>
+        </div>
+      </aside>
+      {menuOpen && (
+        <button
+          className="menu-backdrop"
+          aria-label="Fechar menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+      <div className="lab-workspace">
+        <header className="lab-topbar">
+          <div className="breadcrumb">
+            <button
+              className="menu-toggle"
+              aria-label="Abrir navegação"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              <Menu size={20} />
+            </button>
+            <span>Laboratório de privacidade</span>
+            <span className="breadcrumb-slash">/</span>
+            <strong>{tabTitle}</strong>
+          </div>
+          <div
+            className="connection"
+            title={
+              health === "offline"
+                ? "Inicie o backend FastAPI na porta 8000 para executar experimentos."
+                : "Conexão com o backend"
+            }
+          >
+            <span className={`status-dot ${health}`} />
+            <span>
+              {health === "online"
+                ? `API conectada${device ? ` · ${device.toUpperCase()}` : ""}`
+                : health === "checking"
+                  ? "Conectando à API"
+                  : "API desconectada"}
+            </span>
+          </div>
+        </header>
+        <main id="main-content" className="lab-sheet" tabIndex={-1}>
+          <Suspense fallback={<p role="status">Carregando o laboratório…</p>}>
+            {activeTab !== "overview" && activeTab !== "code" && (
+              <div className="workspace-heading">
+                <div>
+                  <h1>
+                    {activeTab === "setup"
+                      ? "Configure o experimento"
+                      : activeTab === "execute"
+                        ? "Acompanhe a execução"
+                        : activeTab === "results"
+                          ? "O que foi reconstruído?"
+                          : "Leia os resultados"}
+                  </h1>
+                  <p>
+                    {activeTab === "setup"
+                      ? "Uma hipótese por vez. Ajuste o cenário e observe o que muda."
+                      : activeTab === "execute"
+                        ? "Da requisição ao resultado da otimização."
+                        : activeTab === "results"
+                          ? "Compare os dados originais com o que os gradientes revelaram."
+                          : "Convergência da otimização e impacto das defesas."}
+                  </p>
+                </div>
+                {activeTab === "setup" && (
+                  <button
+                    className="quiet-action"
+                    disabled={runState === "running"}
+                    onClick={() =>
+                      setConfig({
+                        ...DEFAULT_CONFIG,
+                        defenseParams: { ...DEFAULT_CONFIG.defenseParams },
+                      })
+                    }
+                  >
+                    <RotateCcw size={15} /> Restaurar padrões
+                  </button>
+                )}
               </div>
             )}
-          </ErrorBoundary>
-        )}
-
-        {/* Step 3 — Resultados */}
-        {activeTab === "results" && (
-          <ErrorBoundary>
-            <ResultsPanel
-              response={response}
-              isLoading={runState === "running"}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Step 4 — Gráficos */}
-        {activeTab === "charts" && (
-          <ErrorBoundary>
-            <ChartsPanel
-              response={response}
-              isLoading={runState === "running"}
-            />
-          </ErrorBoundary>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-graphite-800/60">
-        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6">
-          <p className="text-center text-[11px] text-graphite-600">
-            DLG Attack Tool • CIFAR-100 + LeNet (Sigmoid) • Loss Composta: L2 +
-            Cosine + TV • Flower.ai Design System
-          </p>
+            {runState === "error" && error && (
+              <div className="error-banner" role="alert">
+                <strong>O experimento não foi concluído.</strong>
+                <p>{error}</p>
+                <button
+                  className="text-action"
+                  onClick={() => navigate("setup")}
+                >
+                  Revisar configuração <ArrowRight size={15} />
+                </button>
+              </div>
+            )}
+            {activeTab === "overview" && (
+              <LearningPanel
+                onExperiment={() => navigate("setup")}
+                onCode={() => navigate("code")}
+              />
+            )}
+            {activeTab === "code" && <CodePanel />}
+            {activeTab === "setup" && (
+              <div className="experiment-layout">
+                <div className="panel-content">
+                  <ErrorBoundary>
+                    <fieldset
+                      disabled={runState === "running"}
+                      className="setup-fieldset"
+                    >
+                      <legend className="sr-only">
+                        Parâmetros do experimento
+                      </legend>
+                      <SetupPanel
+                        config={config}
+                        onChange={setConfig}
+                        isRunning={runState === "running"}
+                      />
+                    </fieldset>
+                  </ErrorBoundary>
+                </div>
+                <aside className="experiment-summary">
+                  <h2>Seu experimento</h2>
+                  <dl>
+                    <div>
+                      <dt>Ambiente</dt>
+                      <dd>
+                        {config.environment === "federated"
+                          ? "Federado"
+                          : "Centralizado"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Batch</dt>
+                      <dd>
+                        {config.batchSize}{" "}
+                        {config.batchSize === 1 ? "imagem" : "imagens"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Iterações</dt>
+                      <dd>{config.numIters.toLocaleString("pt-BR")}</dd>
+                    </div>
+                    <div>
+                      <dt>Seed</dt>
+                      <dd>{config.seed}</dd>
+                    </div>
+                    <div>
+                      <dt>Defesa</dt>
+                      <dd>{defenseLabels[config.defense]}</dd>
+                    </div>
+                  </dl>
+                  {config.environment === "federated" && (
+                    <p>
+                      {config.flClients} clientes · {config.flRounds} rodadas ·{" "}
+                      {config.partitionerType.toUpperCase()}
+                    </p>
+                  )}
+                  <button
+                    className="primary-action"
+                    disabled={runState === "running"}
+                    onClick={handleStart}
+                  >
+                    <Play size={16} />
+                    {runState === "running" ? "Em execução" : "Executar ataque"}
+                  </button>
+                  <p className="summary-note">
+                    O processamento usa o backend Python. A duração depende das
+                    iterações e do dispositivo.
+                  </p>
+                  {health === "offline" && (
+                    <div className="backend-notice">
+                      <strong>Backend indisponível</strong>
+                      <p>
+                        Você pode explorar a teoria e configurar o cenário. Para
+                        executar, inicie a API local.
+                      </p>
+                      <code>python -m uvicorn app:app --port 8000</code>
+                    </div>
+                  )}
+                  <div className="experiment-tip">
+                    <h3>Comece pelo essencial</h3>
+                    <p>
+                      Use batch 1 e nenhuma defesa como referência. Depois
+                      altere uma variável para comparar os efeitos.
+                    </p>
+                    <button
+                      className="text-action"
+                      onClick={() => navigate("overview")}
+                    >
+                      Revisar os conceitos <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </aside>
+              </div>
+            )}
+            {activeTab === "execute" && (
+              <div className="panel-content">
+                <ErrorBoundary>
+                  <ExecutionPanel
+                    config={config}
+                    isRunning={runState === "running"}
+                    logs={logs}
+                    progress={progress}
+                    onStart={handleStart}
+                    onAbort={handleAbort}
+                  />
+                  {config.environment === "federated" && (
+                    <div className="mt-6">
+                      <FederatedFlowPanel
+                        config={config}
+                        isRunning={runState === "running"}
+                      />
+                    </div>
+                  )}
+                </ErrorBoundary>
+              </div>
+            )}
+            {activeTab === "results" && (
+              <div className="panel-content">
+                <ErrorBoundary>
+                  <ResultsPanel
+                    response={response}
+                    isLoading={runState === "running"}
+                  />
+                </ErrorBoundary>
+                {!response && runState !== "running" && (
+                  <button
+                    className="primary-action empty-action"
+                    onClick={() => navigate("setup")}
+                  >
+                    Configurar experimento <ArrowRight size={16} />
+                  </button>
+                )}
+              </div>
+            )}
+            {activeTab === "charts" && (
+              <div className="panel-content">
+                <ErrorBoundary>
+                  <ChartsPanel
+                    response={response}
+                    isLoading={runState === "running"}
+                  />
+                </ErrorBoundary>
+                {!response && runState !== "running" && (
+                  <button
+                    className="primary-action empty-action"
+                    onClick={() => navigate("setup")}
+                  >
+                    Configurar experimento <ArrowRight size={16} />
+                  </button>
+                )}
+              </div>
+            )}
+            <footer className="lab-footer">
+              <span>
+                DLG / lab <span>Aprender observando.</span>
+              </span>
+              <a
+                href="https://github.com/Eni19/dlg_simulator"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Explore a implementação <ArrowUpRight size={14} />
+              </a>
+            </footer>
+          </Suspense>
+        </main>
+      </div>
+      {runState === "running" && activeTab !== "execute" && (
+        <div className="running-notice" role="status">
+          <span className="status-dot running" />
+          <button onClick={() => navigate("execute")}>
+            Experimento em andamento · ver execução
+          </button>
+          <button aria-label="Cancelar espera" onClick={handleAbort}>
+            <Square size={15} />
+          </button>
         </div>
-      </footer>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { MetricsBadge } from "@/components/ui/MetricsBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -81,8 +81,8 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                 Nenhum Resultado
               </h3>
               <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Execute o ataque DLG para visualizar as imagens reconstruídas
-                e as métricas de qualidade (PSNR / SSIM).
+                Execute o ataque DLG para visualizar as imagens reconstruídas e
+                as métricas de qualidade (PSNR / SSIM).
               </p>
             </div>
           </div>
@@ -138,10 +138,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             label="Loss Final"
             value={
               response.lossHistory.length > 0
-                ? fmt(
-                    response.lossHistory[response.lossHistory.length - 1],
-                    6,
-                  )
+                ? fmt(response.lossHistory[response.lossHistory.length - 1], 6)
                 : "—"
             }
           />
@@ -183,18 +180,19 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+              <p className="text-[10px] font-medium  text-graphite-500">
                 Acurácia Top-1 / Top-5
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold text-blue-400">
-                {response.accuracyMetrics!.testAccuracy}% / {response.accuracyMetrics!.testAccuracyTop5}%
+              <p className="mt-1 tabular-nums text-2xl font-bold text-blue-400">
+                {response.accuracyMetrics!.testAccuracy}% /{" "}
+                {response.accuracyMetrics!.testAccuracyTop5}%
               </p>
             </div>
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+              <p className="text-[10px] font-medium  text-graphite-500">
                 Loss Média (Teste)
               </p>
-              <p className="mt-1 font-mono text-2xl font-bold text-graphite-300">
+              <p className="mt-1 tabular-nums text-2xl font-bold text-graphite-300">
                 {fmt(response.accuracyMetrics!.testLoss, 4)}
               </p>
             </div>
@@ -211,26 +209,26 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
           />
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+              <p className="text-[10px] font-medium  text-graphite-500">
                 Esparsidade
               </p>
-              <p className="mt-1 font-mono text-xl font-bold text-amber-400">
+              <p className="mt-1 tabular-nums text-xl font-bold text-amber-400">
                 {(response.sparsityStats!.sparsity * 100).toFixed(1)}%
               </p>
             </div>
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+              <p className="text-[10px] font-medium  text-graphite-500">
                 Pesos Zerados
               </p>
-              <p className="mt-1 font-mono text-xl font-bold text-graphite-300">
+              <p className="mt-1 tabular-nums text-xl font-bold text-graphite-300">
                 {response.sparsityStats!.zero.toLocaleString()}
               </p>
             </div>
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
+              <p className="text-[10px] font-medium  text-graphite-500">
                 Razão de Compressão
               </p>
-              <p className="mt-1 font-mono text-xl font-bold text-emerald-400">
+              <p className="mt-1 tabular-nums text-xl font-bold text-emerald-400">
                 {fmt(response.sparsityStats!.compressionRatio, 2)}x
               </p>
             </div>
@@ -304,11 +302,12 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                 <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400" />
                 Progresso da Reconstrução
               </p>
-              <span className="text-xs font-mono font-semibold text-emerald-400">
+              <span className="text-xs tabular-nums font-semibold text-emerald-400">
                 {displayLabel}
               </span>
             </div>
             <input
+              aria-label="Iteração da reconstrução"
               type="range"
               min={-1}
               max={response.snapshotIterations.length - 1}
@@ -320,9 +319,9 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5
                 [&::-webkit-slider-thumb]:rounded-full
                 [&::-webkit-slider-thumb]:bg-emerald-500
-                [&::-webkit-slider-thumb]:shadow-lg
+                [&::-webkit-slider-thumb]:
                 [&::-webkit-slider-thumb]:cursor-pointer
-                [&::-webkit-slider-thumb]:transition-all
+                [&::-webkit-slider-thumb]:transition-colors
                 [&::-webkit-slider-thumb]:hover:scale-110"
             />
             <div className="flex justify-between mt-1.5">
@@ -359,8 +358,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             {Array.from({ length: response.batchSize }).map((_, i) => {
               const gtImg = response.groundTruthImages[i];
               const errImg = response.errorImages[i];
-              const predLabel =
-                response.reconstructedLabels?.[i] ?? null;
+              const predLabel = response.reconstructedLabels?.[i] ?? null;
 
               // Monta listas para o lightbox (3 imagens por item)
               const lbImages = [gtImg, displayImages[i] ?? "", errImg];
@@ -395,10 +393,13 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                       className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
                       onClick={() => openZoom(lbImages, lbLabels, 0)}
                     >
-                      <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-graphite-400">
+                      <p className="mb-3 text-center text-xs font-semibold  text-graphite-400">
                         Ground Truth
                       </p>
-                      <div className="relative mx-auto flex items-center justify-center" style={{ width: 224, height: 224 }}>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: 224, height: 224 }}
+                      >
                         <img
                           src={`data:image/png;base64,${gtImg}`}
                           alt={`Ground Truth ${i + 1}`}
@@ -410,7 +411,10 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                             objectFit: "contain",
                           }}
                         />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" style={{ background: "rgba(0,0,0,0.5)" }}>
+                        <div
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.5)" }}
+                        >
                           <span className="flex items-center gap-1.5 rounded-lg bg-black/80 px-3 py-2 text-sm font-medium text-white">
                             <ZoomIn className="h-4 w-4" />
                             Ampliar
@@ -424,10 +428,13 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                       className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
                       onClick={() => openZoom(lbImages, lbLabels, 1)}
                     >
-                      <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                      <p className="mb-3 text-center text-xs font-semibold  text-emerald-400">
                         Reconstrução
                       </p>
-                      <div className="relative mx-auto flex items-center justify-center" style={{ width: 224, height: 224 }}>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: 224, height: 224 }}
+                      >
                         <img
                           src={`data:image/png;base64,${displayImages[i] ?? ""}`}
                           alt={`Reconstrução ${i + 1}`}
@@ -439,12 +446,18 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                             objectFit: "contain",
                           }}
                         />
-                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" style={{ background: "rgba(0,0,0,0.4)" }}>
-                          {response.perImageMetrics && response.perImageMetrics[i] && iterSliderIndex === -1 && (
-                            <span className="rounded bg-emerald-500/90 px-3 py-1.5 text-sm font-bold text-white shadow-lg border border-emerald-400/30">
-                              SSIM: {response.perImageMetrics[i].ssim.toFixed(4)}
-                            </span>
-                          )}
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.4)" }}
+                        >
+                          {response.perImageMetrics &&
+                            response.perImageMetrics[i] &&
+                            iterSliderIndex === -1 && (
+                              <span className="rounded bg-emerald-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-emerald-400/30">
+                                SSIM:{" "}
+                                {response.perImageMetrics[i].ssim.toFixed(4)}
+                              </span>
+                            )}
                         </div>
                       </div>
                     </button>
@@ -454,10 +467,13 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                       className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
                       onClick={() => openZoom(lbImages, lbLabels, 2)}
                     >
-                      <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-red-400">
+                      <p className="mb-3 text-center text-xs font-semibold  text-red-400">
                         Erro Absoluto
                       </p>
-                      <div className="relative mx-auto flex items-center justify-center" style={{ width: 224, height: 224 }}>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: 224, height: 224 }}
+                      >
                         <img
                           src={`data:image/png;base64,${errImg}`}
                           alt={`Erro absoluto ${i + 1}`}
@@ -469,12 +485,18 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
                             objectFit: "contain",
                           }}
                         />
-                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg" style={{ background: "rgba(0,0,0,0.4)" }}>
-                          {response.perImageMetrics && response.perImageMetrics[i] && iterSliderIndex === -1 && (
-                            <span className="rounded bg-red-500/90 px-3 py-1.5 text-sm font-bold text-white shadow-lg border border-red-400/30">
-                              MSE: {response.perImageMetrics[i].mse.toFixed(4)}
-                            </span>
-                          )}
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.4)" }}
+                        >
+                          {response.perImageMetrics &&
+                            response.perImageMetrics[i] &&
+                            iterSliderIndex === -1 && (
+                              <span className="rounded bg-red-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-red-400/30">
+                                MSE:{" "}
+                                {response.perImageMetrics[i].mse.toFixed(4)}
+                              </span>
+                            )}
                         </div>
                       </div>
                     </button>
@@ -517,9 +539,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             )
           }
           onNext={() =>
-            setLightboxIdx((p) =>
-              p + 1 >= lightboxImages.length ? 0 : p + 1,
-            )
+            setLightboxIdx((p) => (p + 1 >= lightboxImages.length ? 0 : p + 1))
           }
         />
       )}
@@ -540,11 +560,11 @@ function SummaryItem({
 }) {
   return (
     <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500 flex items-center gap-1.5">
+      <p className="text-[10px] font-medium  text-graphite-500 flex items-center gap-1.5">
         {icon}
         {label}
       </p>
-      <p className="mt-0.5 font-mono text-sm font-semibold text-emerald-400">
+      <p className="mt-0.5 tabular-nums text-sm font-semibold text-emerald-400">
         {value}
       </p>
     </div>
@@ -568,17 +588,14 @@ function PenaltyItem({
   lowerIsWorse?: boolean;
   higherIsWorse?: boolean;
 }) {
-  const isBad =
-    (lowerIsWorse && delta < 0) || (higherIsWorse && delta > 0);
+  const isBad = (lowerIsWorse && delta < 0) || (higherIsWorse && delta > 0);
   const sign = delta >= 0 ? "+" : "";
 
   return (
     <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-graphite-500">
-        {label}
-      </p>
+      <p className="text-[10px] font-medium  text-graphite-500">{label}</p>
       <p
-        className={`mt-1 font-mono text-xl font-bold ${isBad ? "text-red-400" : "text-emerald-400"}`}
+        className={`mt-1 tabular-nums text-xl font-bold ${isBad ? "text-red-400" : "text-emerald-400"}`}
       >
         {sign}
         {fmtFn(delta)}

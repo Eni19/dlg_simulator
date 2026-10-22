@@ -2,7 +2,6 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Toggle } from "@/components/ui/Toggle";
 import { Slider } from "@/components/ui/Slider";
 import { Switch } from "@/components/ui/Switch";
-import { Button } from "@/components/ui/Button";
 import { DataDistributionPanel } from "./DataDistributionPanel";
 import type { AttackConfig, DefenseType, Environment } from "@/lib/types";
 import {
@@ -10,14 +9,10 @@ import {
   Globe,
   Network,
   Shield,
-  Layers,
-  Hash,
-  GitBranch,
-  Zap,
   Server,
   UserX,
   Wifi,
-  AlertTriangle
+  AlertTriangle,
 } from "lucide-react";
 
 interface SetupPanelProps {
@@ -114,8 +109,10 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
           <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
             <div className="text-sm">
-              <strong>Aviso:</strong> O ataque DLG original tem enorme dificuldade em desembaraçar imagens (batch entanglement). 
-              Usar um batch maior que 1 no ambiente federado provavelmente resultará em imagens com <strong>ruído puro</strong>.
+              <strong>Aviso:</strong> O ataque DLG original tem enorme
+              dificuldade em desembaraçar imagens (batch entanglement). Usar um
+              batch maior que 1 no ambiente federado provavelmente resultará em
+              imagens com <strong>ruído puro</strong>.
             </div>
           </div>
         )}
@@ -171,9 +168,9 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             <div className="grid gap-3 sm:grid-cols-3">
               <button
                 onClick={() => patch({ attackerRole: "malicious_server" })}
-                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-all ${
+                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-colors ${
                   config.attackerRole === "malicious_server"
-                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 "
                     : "bg-graphite-900/50 border-graphite-800 text-graphite-400 hover:border-graphite-700 hover:bg-graphite-800"
                 }`}
               >
@@ -182,9 +179,9 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
               </button>
               <button
                 onClick={() => patch({ attackerRole: "malicious_client" })}
-                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-all ${
+                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-colors ${
                   config.attackerRole === "malicious_client"
-                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 "
                     : "bg-graphite-900/50 border-graphite-800 text-graphite-400 hover:border-graphite-700 hover:bg-graphite-800"
                 }`}
               >
@@ -193,9 +190,9 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
               </button>
               <button
                 onClick={() => patch({ attackerRole: "mitm" })}
-                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-all ${
+                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center transition-colors ${
                   config.attackerRole === "mitm"
-                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 "
                     : "bg-graphite-900/50 border-graphite-800 text-graphite-400 hover:border-graphite-700 hover:bg-graphite-800"
                 }`}
               >
@@ -203,17 +200,24 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
                 <span className="text-xs font-medium">Man-in-the-Middle</span>
               </button>
             </div>
-            
+
             <p className="mt-3 text-xs text-graphite-400">
-              {config.attackerRole === "malicious_server" && "O Servidor Central inspeciona os gradientes enviados individualmente pelos clientes antes da agregação global."}
-              {config.attackerRole === "malicious_client" && "Um cliente da rede subtrai sua própria atualização do modelo global agregado para descobrir os gradientes da vítima."}
-              {config.attackerRole === "mitm" && "Um hacker na rede intercepta o pacote de dados do cliente a caminho da nuvem."}
+              {config.attackerRole === "malicious_server" &&
+                "O Servidor Central inspeciona os gradientes enviados individualmente pelos clientes antes da agregação global."}
+              {config.attackerRole === "malicious_client" &&
+                "Um cliente da rede subtrai sua própria atualização do modelo global agregado para descobrir os gradientes da vítima."}
+              {config.attackerRole === "mitm" &&
+                "Um hacker na rede intercepta o pacote de dados do cliente a caminho da nuvem."}
             </p>
           </div>
 
           {/* Gráfico de Distribuição do Flower */}
           <div className="mt-6 border-t border-emerald-900/30 pt-6">
-            <DataDistributionPanel config={config} onChange={onChange} isRunning={isRunning} />
+            <DataDistributionPanel
+              config={config}
+              onChange={onChange}
+              isRunning={isRunning}
+            />
           </div>
         </Card>
       )}
@@ -241,7 +245,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
                 })
               }
               disabled={isRunning}
-              className={`rounded-lg px-3.5 py-2 text-xs font-medium transition-all duration-200 ${
+              className={`rounded-lg px-3.5 py-2 text-xs font-medium transition-colors duration-200 ${
                 config.defense === opt.value
                   ? "bg-amber-600/20 text-amber-400 border border-amber-500/30"
                   : "bg-graphite-800/60 text-graphite-400 border border-transparent hover:border-graphite-700"

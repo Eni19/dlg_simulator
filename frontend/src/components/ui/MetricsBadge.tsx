@@ -12,26 +12,47 @@ interface MetricsBadgeProps {
  * Badge compacto exibindo métricas PSNR e SSIM.
  * Design inspirado no Flower.ai — minimalista com cores semânticas.
  */
-export function MetricsBadge({ psnr, ssim, className, size = "md" }: MetricsBadgeProps) {
+export function MetricsBadge({
+  psnr,
+  ssim,
+  className,
+  size = "md",
+}: MetricsBadgeProps) {
   const isSm = size === "sm";
 
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-3 rounded-xl border border-graphite-800/60 bg-graphite-900/70 px-4 py-2 backdrop-blur-sm",
-        className
+        "inline-flex items-center gap-3 rounded-xl border border-graphite-800/60 bg-graphite-900/70 px-4 py-2 ",
+        className,
       )}
     >
       <div className="flex items-center gap-1.5">
-        <Zap className={cn("text-emerald-500", isSm ? "h-3.5 w-3.5" : "h-4 w-4")} />
-        <span className={cn("tabular-nums font-mono font-medium", isSm ? "text-xs" : "text-sm", psnrColor(psnr))}>
+        <Zap
+          className={cn("text-emerald-500", isSm ? "h-3.5 w-3.5" : "h-4 w-4")}
+        />
+        <span
+          className={cn(
+            "tabular-nums tabular-nums font-medium",
+            isSm ? "text-xs" : "text-sm",
+            psnrColor(psnr),
+          )}
+        >
           {fmtPSNR(psnr)}
         </span>
       </div>
       <div className="h-4 w-px bg-graphite-700" />
       <div className="flex items-center gap-1.5">
-        <Eye className={cn("text-emerald-500", isSm ? "h-3.5 w-3.5" : "h-4 w-4")} />
-        <span className={cn("tabular-nums font-mono font-medium", isSm ? "text-xs" : "text-sm", ssimColor(ssim))}>
+        <Eye
+          className={cn("text-emerald-500", isSm ? "h-3.5 w-3.5" : "h-4 w-4")}
+        />
+        <span
+          className={cn(
+            "tabular-nums tabular-nums font-medium",
+            isSm ? "text-xs" : "text-sm",
+            ssimColor(ssim),
+          )}
+        >
           {fmtSSIM(ssim)}
         </span>
       </div>

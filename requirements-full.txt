@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Optional locally; not packaged with the Vercel showcase.
+flwr==1.42.0
+flwr-datasets[vision]==0.6.1
+matplotlib>=3.7.0

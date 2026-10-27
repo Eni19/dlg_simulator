@@ -18,14 +18,13 @@ interface TerminalProps {
 }
 
 /**
- * Terminal de Logs Interativo — simula um console ao vivo
- * para exibição do progresso das iterações do ataque DLG.
+ * Registro das etapas e contagens recebidas durante o experimento.
  */
 export function Terminal({
   logs,
   className,
   maxLines = 25,
-  title = "DLG Attack Logs",
+  title = "Etapas do experimento",
   isRunning = false,
 }: TerminalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,7 +79,7 @@ export function Terminal({
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
             <span className="text-[11px] font-medium text-emerald-500">
-              RUNNING
+              Em curso
             </span>
           </div>
         )}
@@ -94,7 +93,7 @@ export function Terminal({
         {visibleLogs.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <p className="animate-pulse text-graphite-600">
-              Aguardando início do ataque...
+              As etapas aparecerão aqui quando você iniciar o experimento.
             </p>
           </div>
         )}
@@ -107,7 +106,7 @@ export function Terminal({
             )}
           >
             <span className="select-none text-graphite-700">›</span>
-            <span className="whitespace-pre-wrap break-all">{line.text}</span>
+            <span className="whitespace-pre-wrap break-words min-w-0">{line.text}</span>
           </div>
         ))}
       </div>
@@ -115,7 +114,7 @@ export function Terminal({
       {/* Footer — barra de status */}
       <div className="border-t border-graphite-800/50 px-5 py-2">
         <p className="text-[10px] text-graphite-600">
-          {logs.length} lines · {isRunning ? "Streaming" : "Complete"}
+          {logs.length} registros · {isRunning ? "Recebendo atualizações" : logs.length ? "Acompanhamento encerrado" : "Pronto para começar"}
         </p>
       </div>
     </div>

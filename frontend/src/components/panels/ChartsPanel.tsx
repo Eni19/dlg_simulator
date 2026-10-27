@@ -6,6 +6,7 @@ import type {
   DefenseChartDataPoint,
 } from "@/lib/types";
 import { fmt } from "@/lib/utils";
+import { defenseLabel } from "@/lib/types";
 import {
   ResponsiveContainer,
   LineChart,
@@ -61,11 +62,11 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
-                Nenhum Gráfico Disponível
+                Os gráficos vão contar a história da busca
               </h3>
               <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Execute o ataque DLG para visualizar a curva de convergência e a
-                comparação de defesas.
+                Primeiro, inicie um experimento. Depois, acompanhe como o erro
+                da busca mudou e, quando houver uma comparação, o que a defesa alterou.
               </p>
             </div>
           </div>
@@ -98,7 +99,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
           mse: safe(penalty.mseWithoutDefense, 0),
         },
         {
-          name: `Com ${response.metrics?.defenseType ?? "Defesa"}`,
+          name: `Com ${defenseLabel(response.metrics?.defenseType ?? "defesa")}`,
           ssim: safe(penalty.ssimWithDefense, 0),
           psnr: safe(penalty.psnrWithDefense, 0),
           mse: safe(penalty.mseWithDefense, 0),
@@ -118,7 +119,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
       {/* Curva de Perda (Loss Decay) */}
       <Card>
         <CardHeader
-          title="Curva de Convergência (Loss Decay)"
+          title="Como o erro da busca mudou"
           subtitle={`${lossData.length} pontos · Escala logarítmica`}
           action={<TrendingDown className="h-5 w-5 text-emerald-500" />}
         />
@@ -139,7 +140,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 tickLine={{ stroke: GRAPHITE_GRID }}
                 axisLine={{ stroke: GRAPHITE_GRID }}
                 label={{
-                  value: "Iteração (ciclo × 10)",
+                  value: "Ciclos de ajuste",
                   position: "insideBottom",
                   offset: -5,
                   fill: GRAPHITE_TEXT,
@@ -153,7 +154,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 tickLine={{ stroke: GRAPHITE_GRID }}
                 axisLine={{ stroke: GRAPHITE_GRID }}
                 label={{
-                  value: "Loss Composta",
+                  value: "Erro da busca (loss)",
                   angle: -90,
                   position: "insideLeft",
                   fill: GRAPHITE_TEXT,
@@ -190,20 +191,21 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
           </ResponsiveContainer>
         </div>
         <p className="mt-3 text-center text-xs text-graphite-500">
-          Loss composta: (1−α)·L2 + α·cosine + TV adaptativo + label anchoring
+          A loss é o erro usado para guiar os ajustes. Quando diminui, a busca se aproxima
+          do seu objetivo numérico. Compare também as imagens para avaliar o que foi recuperado.
         </p>
       </Card>
 
       {/* Comparação de Defesas */}
       <Card>
         <CardHeader
-          title="Impacto da Defesa na Reconstrução"
+          title="O que a defesa mudou?"
           subtitle={
             hasPenalty
-              ? `Comparação com vs sem ${response.metrics?.defenseType ?? "defesa"}`
+              ? `Compare a reconstrução com e sem ${defenseLabel(response.metrics?.defenseType ?? "defesa")}`
               : response.metrics?.defenseType
-                ? `Defesa: ${response.metrics.defenseType}`
-                : "Comparação de métricas por tipo de defesa"
+                ? `Defesa: ${defenseLabel(response.metrics.defenseType)}`
+                : "Sem defesa adicional: esta é sua referência inicial"
           }
         />
         <div className="h-64 w-full">
@@ -260,8 +262,8 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
         </div>
         <p className="mt-3 text-center text-xs text-graphite-500">
           {hasPenalty
-            ? `Δ SSIM: ${penalty.deltaSsim >= 0 ? "+" : ""}${fmt(penalty.deltaSsim, 4)} · Uma defesa eficaz reduz SSIM`
-            : "Esta execução não contém uma comparação pareada com e sem defesa."}
+            ? `Mudança no SSIM: ${penalty.deltaSsim >= 0 ? "+" : ""}${fmt(penalty.deltaSsim, 4)}. Uma queda indica menor semelhança estrutural nesta comparação.`
+            : "Há apenas um cenário neste resultado. Para comparar o efeito de uma defesa, ative uma na aba Experimento."}
         </p>
       </Card>
     </div>

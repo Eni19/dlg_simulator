@@ -3,6 +3,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Slider } from "@/components/ui/Slider";
 import { Switch } from "@/components/ui/Switch";
 import { DataDistributionPanel } from "./DataDistributionPanel";
+import { ShowcaseSetup } from "./ShowcaseSetup";
 import type { AttackConfig, DefenseType, Environment } from "@/lib/types";
 import {
   Cpu,
@@ -19,13 +20,16 @@ interface SetupPanelProps {
   config: AttackConfig;
   onChange: (config: AttackConfig) => void;
   isRunning: boolean;
+  isShowcase?: boolean;
+  onStart?: () => void;
 }
 
 /**
  * Step 1 — Configuração do Cenário.
  * Permite selecionar ambiente, batch size, defesas e hiperparâmetros.
  */
-export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
+export function SetupPanel({ config, onChange, isRunning, isShowcase = false, onStart }: SetupPanelProps) {
+  if (isShowcase) return <ShowcaseSetup config={config} onChange={onChange} onStart={onStart} isRunning={isRunning} />;
   const patch = (partial: Partial<AttackConfig>) =>
     onChange({ ...config, ...partial });
 
@@ -36,10 +40,10 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
     });
 
   const defenseOptions: { value: DefenseType; label: string }[] = [
-    { value: "none", label: "Sem Defesa" },
-    { value: "noisy", label: "Noisy Gradients" },
-    { value: "sparse", label: "Sparsification" },
-    { value: "pruning", label: "Model Pruning" },
+    { value: "none", label: "Sem defesa" },
+    { value: "noisy", label: "Adicionar ruído" },
+    { value: "sparse", label: "Compartilhar menos pistas" },
+    { value: "pruning", label: "Remover conexões (poda)" },
   ];
 
   return (
@@ -47,8 +51,8 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
       {/* Ambiente */}
       <Card>
         <CardHeader
-          title="Ambiente de Execução"
-          subtitle="Escolha entre ataque centralizado ou federado com Flower"
+          title="Qual cenário você quer explorar?"
+          subtitle="Comece pelo centralizado, com uma tentativa direta de reconstrução. No federado, vários participantes aprendem juntos."
         />
         <Toggle<Environment>
           options={[
@@ -59,7 +63,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             },
             {
               value: "federated",
-              label: "Federado (Flower)",
+              label: "Federado",
               icon: <Globe className="h-4 w-4" />,
             },
           ]}
@@ -69,16 +73,38 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
         />
       </Card>
 
+      <Card>
+        <CardHeader title="Onde fazer os cálculos?" subtitle="Use CPU ou a placa de vídeo disponível no computador que executa o laboratório." />
+        <label htmlFor="experiment-device" className="block text-sm font-medium mb-2">
+          Dispositivo
+        </label>
+        <select
+          id="experiment-device"
+          value={config.device}
+          onChange={(event) => patch({ device: event.target.value as AttackConfig["device"] })}
+          className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          aria-describedby="device-help"
+        >
+          <option value="cpu">CPU</option>
+          <option value="cuda">GPU NVIDIA (CUDA)</option>
+          <option value="auto">Automático (GPU quando disponível)</option>
+        </select>
+        <p id="device-help" className="mt-2 text-sm text-graphite-400">
+          CPU é um bom ponto de partida. A GPU usa sua placa NVIDIA, mas pode ser mais lenta
+          neste experimento pequeno. Automático prefere GPU quando disponível e usa CPU caso contrário.
+        </p>
+      </Card>
+
       {/* Configuração do Ataque */}
       <Card>
         <CardHeader
-          title="Parâmetros do Ataque"
-          subtitle="Configure o tamanho do batch e iterações"
+          title="Vamos começar com uma imagem?"
+          subtitle="Uma imagem e 50 iterações são um teste inicial. Depois, aumente um valor por vez para observar a diferença."
         />
         <div className="grid gap-6 sm:grid-cols-2">
           <Slider
-            label="Tamanho do Batch"
-            suffix=" imagens"
+            label="Imagens por vez (batch)"
+            suffix={config.batchSize === 1 ? " imagem" : " imagens"}
             value={config.batchSize}
             min={1}
             max={8}
@@ -91,7 +117,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             ]}
           />
           <Slider
-            label="Iterações do Ataque"
+            label="Tentativas de ajuste (iterações)"
             value={config.numIters}
             min={50}
             max={5000}
@@ -105,21 +131,25 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
           />
         </div>
 
+        <p className="mt-3 text-sm text-graphite-400">
+          Mais iterações dão mais oportunidades de ajuste e aumentam o tempo de espera.
+          Elas podem melhorar a reconstrução, mas o resultado também depende das imagens e das defesas.
+        </p>
+
         {config.environment === "federated" && config.batchSize > 1 && (
           <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
             <div className="text-sm">
-              <strong>Aviso:</strong> O ataque DLG original tem enorme
-              dificuldade em desembaraçar imagens (batch entanglement). Usar um
-              batch maior que 1 no ambiente federado provavelmente resultará em
-              imagens com <strong>ruído puro</strong>.
+              <strong>Um desafio maior:</strong> as pistas de várias imagens se
+              misturam no mesmo cálculo. Separá-las fica mais difícil. No cenário
+              federado, use uma imagem por vez como referência antes de aumentar o grupo.
             </div>
           </div>
         )}
 
         <div className="mt-5 grid gap-6 sm:grid-cols-2">
           <Slider
-            label="Seed"
+            label="Início aleatório (seed)"
             value={config.seed}
             min={0}
             max={999}
@@ -127,6 +157,9 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             onChange={(v) => patch({ seed: v })}
           />
         </div>
+        <p className="mt-2 text-sm text-graphite-400">
+          A seed define o ponto de partida dos cálculos aleatórios. Pode manter esse valor no primeiro teste.
+        </p>
       </Card>
 
       {/* Federated Learning */}
@@ -136,14 +169,14 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             title={
               <span className="flex items-center gap-2">
                 <Network className="h-4 w-4 text-emerald-400" />
-                Federated Learning
+                Aprendizado em conjunto
               </span>
             }
-            subtitle="Configuração da simulação Flower com FedAvg manual"
+            subtitle="Cada participante, chamado de cliente, treina com seus exemplos. A cada rodada, o servidor combina o que eles aprenderam."
           />
           <div className="grid gap-6 sm:grid-cols-2">
             <Slider
-              label="Número de Clientes"
+              label="Participantes (clientes)"
               value={config.flClients}
               min={2}
               max={10}
@@ -151,7 +184,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
               onChange={(v) => patch({ flClients: v })}
             />
             <Slider
-              label="Rodadas de Agregação"
+              label="Rodadas de aprendizado"
               value={config.flRounds}
               min={1}
               max={50}
@@ -163,7 +196,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
           {/* Seleção do Papel do Atacante */}
           <div className="mt-6 border-t border-emerald-900/30 pt-6">
             <h4 className="mb-3 text-sm font-medium text-emerald-100 flex items-center gap-2">
-              <Shield className="h-4 w-4" /> Tipo de Ameaça (Ator Malicioso)
+              <Shield className="h-4 w-4" /> Quem tem acesso às pistas?
             </h4>
             <div className="grid gap-3 sm:grid-cols-3">
               <button
@@ -175,7 +208,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
                 }`}
               >
                 <Server className="h-5 w-5" />
-                <span className="text-xs font-medium">Servidor Curioso</span>
+                <span className="text-xs font-medium">O servidor</span>
               </button>
               <button
                 onClick={() => patch({ attackerRole: "malicious_client" })}
@@ -186,7 +219,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
                 }`}
               >
                 <UserX className="h-5 w-5" />
-                <span className="text-xs font-medium">Cliente Malicioso</span>
+                <span className="text-xs font-medium">Outro participante</span>
               </button>
               <button
                 onClick={() => patch({ attackerRole: "mitm" })}
@@ -197,17 +230,17 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
                 }`}
               >
                 <Wifi className="h-5 w-5" />
-                <span className="text-xs font-medium">Man-in-the-Middle</span>
+                <span className="text-xs font-medium">Alguém na rede</span>
               </button>
             </div>
 
             <p className="mt-3 text-xs text-graphite-400">
               {config.attackerRole === "malicious_server" &&
-                "O Servidor Central inspeciona os gradientes enviados individualmente pelos clientes antes da agregação global."}
+                "O coordenador do aprendizado observa as pistas enviadas por cada participante antes de combiná-las."}
               {config.attackerRole === "malicious_client" &&
-                "Um cliente da rede subtrai sua própria atualização do modelo global agregado para descobrir os gradientes da vítima."}
+                "Um participante tenta separar sua própria contribuição da atualização conjunta para estimar o que veio dos outros."}
               {config.attackerRole === "mitm" &&
-                "Um hacker na rede intercepta o pacote de dados do cliente a caminho da nuvem."}
+                "Uma pessoa entre o participante e o servidor observa as atualizações em trânsito. Esse acesso é simulado no laboratório."}
             </p>
           </div>
 
@@ -231,7 +264,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
               Defesas
             </span>
           }
-          subtitle="Ative técnicas de mitigação contra o ataque DLG"
+          subtitle="Primeiro, experimente sem defesa. Depois, escolha uma forma de dificultar a reconstrução e compare o resultado."
         />
 
         {/* Toggle de defesa ativa */}
@@ -256,6 +289,13 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
           ))}
         </div>
 
+        <p className="text-sm text-graphite-400">
+          {config.defense === "none" && "As pistas chegam ao ataque sem uma defesa adicional. Use esse resultado como referência."}
+          {config.defense === "noisy" && "O ruído acrescenta variações aleatórias aos gradientes, como pequenas interferências nas pistas compartilhadas."}
+          {config.defense === "sparse" && "Parte dos gradientes é zerada antes do compartilhamento. A técnica é chamada de esparsificação."}
+          {config.defense === "pruning" && "A poda zera parte dos pesos, os números que representam as conexões do modelo. Isso muda as pistas disponíveis ao ataque."}
+        </p>
+
         {/* Parâmetros da defesa selecionada */}
         {config.defense === "noisy" && (
           <div className="mt-4">
@@ -278,7 +318,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
         {config.defense === "sparse" && (
           <div className="mt-4">
             <Slider
-              label="Gradientes Mantidos (Keep Ratio)"
+              label="Gradientes mantidos"
               suffix="%"
               value={Math.round(config.defenseParams.keepRatio * 100)}
               min={1}
@@ -297,7 +337,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
         {config.defense === "pruning" && (
           <div className="mt-4 space-y-5">
             <Slider
-              label="Proporção de Poda (Model Pruning)"
+              label="Conexões removidas pela poda"
               suffix="%"
               value={Math.round(config.defenseParams.pruningAmount * 100)}
               min={0}
@@ -317,12 +357,12 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-graphite-200">
-                    Atacante Informado
+                    O ataque conhece a poda?
                   </p>
                   <p className="text-xs text-graphite-500 mt-0.5">
                     {config.informedAttacker
-                      ? "Atacante usa o mesmo modelo podado do cliente"
-                      : "Atacante usa modelo original (sem poda) — reconstrução tende a ser pior"}
+                      ? "Sim. A reconstrução usa a mesma versão do modelo, com as conexões removidas."
+                      : "Não. A reconstrução usa o modelo anterior à poda, com informações diferentes das usadas pelo participante."}
                   </p>
                 </div>
                 <Switch
@@ -338,12 +378,18 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
       {/* Hiperparâmetros da Perda */}
       <Card>
         <CardHeader
-          title="Hiperparâmetros da Perda Composta"
-          subtitle="Ajuste fino da loss: L2 + Cosine + TV + Label Anchoring"
+          title="Ajustes avançados da busca"
+          subtitle="Você pode manter os valores prontos. Abra esta parte quando quiser investigar como o algoritmo escolhe os próximos ajustes."
         />
-        <div className="grid gap-6 sm:grid-cols-2">
+        <details>
+          <summary className="cursor-pointer text-sm font-medium">Explorar os pesos e a suavização</summary>
+          <p className="mt-3 text-sm text-graphite-400">
+            Os pesos equilibram os sinais que orientam a reconstrução.
+            A suavização tenta reduzir variações bruscas entre pontos vizinhos da imagem.
+          </p>
+        <div className="mt-4 grid gap-6 sm:grid-cols-2">
           <Slider
-            label="Cosine Weight"
+            label="Direção dos gradientes (cosseno)"
             value={config.cosineWeight}
             min={0}
             max={1}
@@ -351,7 +397,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             onChange={(v) => patch({ cosineWeight: v })}
           />
           <Slider
-            label="Label Anchor Weight"
+            label="Peso da categoria estimada"
             value={config.labelAnchorWeight}
             min={0}
             max={1}
@@ -359,7 +405,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             onChange={(v) => patch({ labelAnchorWeight: v })}
           />
           <Slider
-            label="TV Coeff Start"
+            label="Suavização inicial da imagem (TV)"
             suffix=""
             value={config.tvCoeffStart}
             min={1e-8}
@@ -368,7 +414,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             onChange={(v) => patch({ tvCoeffStart: v })}
           />
           <Slider
-            label="TV Coeff End"
+            label="Suavização final da imagem (TV)"
             suffix=""
             value={config.tvCoeffEnd}
             min={1e-10}
@@ -377,6 +423,7 @@ export function SetupPanel({ config, onChange, isRunning }: SetupPanelProps) {
             onChange={(v) => patch({ tvCoeffEnd: v })}
           />
         </div>
+        </details>
       </Card>
     </div>
   );

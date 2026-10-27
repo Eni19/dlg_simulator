@@ -2,22 +2,23 @@
 # DLG Attack — Dependências do Projeto
 # =============================================================================
 # Core
-torch>=2.0.0
-torchvision>=0.15.0
+# Linux/Vercel: CPU-only wheels avoid bundling CUDA dependencies.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu; sys_platform == "linux"
+torchvision==0.29.1+cpu; sys_platform == "linux"
+torch>=2.0.0; sys_platform != "linux"
+torchvision>=0.15.0; sys_platform != "linux"
 numpy>=1.24.0
 scipy>=1.10.0
 pandas>=1.5.0
 Pillow>=9.0.0
-matplotlib>=3.7.0
 
 # API Web
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 pydantic>=2.0.0
 
-# Federated Learning (opcional — necessário para simulação federada)
-# Descomente a linha abaixo para instalar o Flower:
-# flwr>=1.8.0
+# Full local laboratory: pip install -r requirements-full.txt
 
 # Deploy Serverless (Vercel)
 # O Vercel gerencia estas automaticamente:

@@ -105,8 +105,10 @@ def create_lenet(
     if seed is not None:
         torch.manual_seed(seed)
 
-    model = LeNet(num_classes=num_classes).to(device)
+    # Initialize on CPU so a seed identifies the same weights on CPU and CUDA.
+    model = LeNet(num_classes=num_classes)
     model.apply(weights_init)
+    model = model.to(device)
     model.eval()
 
     return model

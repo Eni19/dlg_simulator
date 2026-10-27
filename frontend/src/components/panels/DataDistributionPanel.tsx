@@ -82,21 +82,21 @@ export function DataDistributionPanel({
         title={
           <span className="flex items-center gap-2">
             <Database className="h-5 w-5 text-emerald-400" />
-            Distribuição de Dados (Flower Datasets)
+            Uma prévia da divisão dos exemplos
           </span>
         }
-        subtitle="Visualize e configure o particionamento de dados usando flwr-datasets[vision]"
+        subtitle="Compare uma divisão mais equilibrada com uma em que cada participante recebe proporções diferentes de categorias."
       />
       <div className="space-y-6">
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
             <p className="mb-2 text-xs font-semibold text-graphite-400 ">
-              Tipo de Particionamento
+              Como dividir os exemplos
             </p>
             <Toggle
               options={[
-                { value: "iid", label: "IID (Uniforme)" },
-                { value: "dirichlet", label: "Dirichlet (Non-IID)" },
+                { value: "iid", label: "Equilibrado (IID)" },
+                { value: "dirichlet", label: "Desigual (Dirichlet)" },
               ]}
               value={config.partitionerType}
               onChange={(val) => onChange({ ...config, partitionerType: val })}
@@ -106,7 +106,7 @@ export function DataDistributionPanel({
 
           {config.partitionerType === "dirichlet" && (
             <Slider
-              label="Dirichlet Alpha"
+              label="Equilíbrio entre categorias (alfa)"
               value={config.dirichletAlpha}
               min={0.1}
               max={10.0}
@@ -133,7 +133,7 @@ export function DataDistributionPanel({
             ) : (
               <PieChart className="h-4 w-4" />
             )}
-            Gerar Gráfico de Distribuição
+            Ver a divisão das imagens
           </Button>
         </div>
 
@@ -146,7 +146,7 @@ export function DataDistributionPanel({
         {data.length > 0 && (
           <div className="rounded-xl border border-graphite-800/60 bg-graphite-900/40 p-5 mt-4">
             <h4 className="text-sm font-semibold text-graphite-200 mb-4 text-center">
-              Amostras CIFAR-100 por Cliente
+              Imagens de cada categoria por participante
             </h4>
             <div className="h-[400px] w-full">
               <ResponsiveContainer width="100%" height="100%">

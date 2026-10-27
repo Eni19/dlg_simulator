@@ -8,9 +8,20 @@ export type Environment = "centralized" | "federated";
 
 export type DefenseType = "none" | "noisy" | "sparse" | "pruning";
 
+export function defenseLabel(defense: string = "none"): string {
+  const labels: Record<string, string> = {
+    none: "Sem defesa",
+    noisy: "Ruído nos gradientes",
+    sparse: "Menos gradientes compartilhados",
+    pruning: "Poda do modelo",
+  };
+  return labels[defense] ?? defense;
+}
+
 export type AttackerRole = "malicious_server" | "malicious_client" | "mitm";
 
 export interface AttackConfig {
+  device: "auto" | "cpu" | "cuda";
   environment: Environment;
   batchSize: number; // 1–8
   numIters: number;
@@ -43,9 +54,10 @@ export interface DefenseParams {
 }
 
 export const DEFAULT_CONFIG: AttackConfig = {
+  device: "cpu",
   environment: "centralized",
-  batchSize: 3,
-  numIters: 800,
+  batchSize: 1,
+  numIters: 50,
   seed: 50,
   defense: "none",
   defenseParams: {
@@ -155,6 +167,7 @@ export interface FederatedResponse {
 }
 
 export interface HealthResponse {
+  mode?: "showcase" | "full";
   status: string;
   version: string;
   device: string;

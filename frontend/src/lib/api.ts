@@ -164,6 +164,7 @@ export async function getModelInfo(): Promise<ModelInfo> {
  */
 function configToPayload(config: AttackConfig): Record<string, unknown> {
   const base: Record<string, unknown> = {
+    device: config.device,
     batch_size: config.batchSize,
     num_iters: config.numIters,
     seed: config.seed,
@@ -215,7 +216,19 @@ export async function runFederated(
   config: AttackConfig,
   signal?: AbortSignal
 ): Promise<AttackResponse> {
-  const payload: Record<string, unknown> = {
+  const payload = configToFederatedPayload(config);
+
+  const raw = await request<Record<string, unknown>>("/federated", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+  return mapSnakeToCamel(raw);
+}
+
+function configToFederatedPayload(config: AttackConfig): Record<string, unknown> {
+  return {
+    device: config.device,
     num_clients: config.flClients,
     num_rounds: config.flRounds,
     attacker_role: config.attackerRole,
@@ -232,14 +245,59 @@ export async function runFederated(
     label_anchor_weight: config.labelAnchorWeight,
   };
 
-  const raw = await request<Record<string, unknown>>("/federated", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal,
-  });
+}
 
-  // Backend agora retorna AttackResponse diretamente
-  return mapSnakeToCamel(raw);
+export interface ExperimentProgress {
+  type: "progress";
+  phase: string;
+  text: string;
+  current: number | null;
+  total: number | null;
+  loss?: number;
+}
+
+export async function runExperimentStream(
+  config: AttackConfig,
+  onProgress: (event: ExperimentProgress) => void,
+  signal: AbortSignal,
+): Promise<AttackResponse> {
+  const kind = config.environment === "federated" ? "federated"
+    : config.defense === "none" ? "attack" : "defense";
+  const response = await fetch(`/api/experiments/${kind}/stream`, {
+    method: "POST", signal,
+    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+    body: JSON.stringify(kind === "federated" ? configToFederatedPayload(config) : configToPayload(config)),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let detail = text;
+    try { detail = JSON.parse(text).detail || text; } catch { /* retain body */ }
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+  if (!response.body) throw new Error("O servidor não disponibilizou o acompanhamento da execução.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split("\n");
+      pending = lines.pop() || "";
+      if (done && pending.trim()) { lines.push(pending); pending = ""; }
+      for (const line of lines) {
+        if (!line.trim()) continue; // heartbeat, not a progress event
+        const event = JSON.parse(line);
+        if (event.type === "error") throw new Error(event.detail || "O experimento falhou.");
+        if (event.type === "result") return mapSnakeToCamel(event.result);
+        if (event.type === "progress") onProgress(event as ExperimentProgress);
+      }
+      if (done) throw new Error("A conexão foi encerrada antes do resultado final. O servidor pode continuar processando.");
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ O caminho dados → gradientes → reconstrução organiza a explicação, a con
 
 ## Product truth
 
-Preservar endpoints e funções científicas. O frontend não deve apresentar progresso estimado como medição. Cancelamento é da espera/requisição; o processamento Python pode continuar. Não fabricar imagens ou métricas para preencher estados vazios.
+Preservar endpoints e funções científicas. O frontend mostra contagens reais por etapa, recebidas do backend via stream, sem estimar tempo restante ou um percentual global entre treino e reconstrução. Cancelamento é da espera/requisição; o processamento Python pode continuar. Não fabricar imagens ou métricas para preencher estados vazios.
 
 ## Surfaces
 

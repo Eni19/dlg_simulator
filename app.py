@@ -21,20 +21,26 @@ import base64
 import io
 import json
 import logging
+import os
 import traceback
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel, Field, validator
 from torchvision import transforms as tv_transforms
 
 from src.models import create_lenet
+from src.online_cifar import OnlineCifar100, OnlineDataUnavailable
+from src.progress import report, reporter
+from src.experiment_stream import stream_experiment
+from src.showcase import is_showcase, validate_showcase, ShowcaseDataset, ITERATIONS, PAIR_ITERATIONS, SAMPLE_IDS, MAX_BATCH_SIZE
+from src.runtime_paths import get_data_root, configure_huggingface_cache
 from src.utils import (
     get_cifar100_data,
     get_device,
@@ -47,14 +53,13 @@ from src.utils import (
     summarize_metrics,
 )
 from src.dlg_attack import DLGAttack
-from src.federated_flower import (
-    FlowerClient,
-    AttackerClient,
-    create_clients,
-    intercept_and_attack,
-    start_federated_simulation,
-    FLOWER_AVAILABLE,
-)
+if not is_showcase():
+    from src.federated_flower import (
+        FlowerClient, AttackerClient, create_clients, intercept_and_attack,
+        start_federated_simulation, FLOWER_AVAILABLE,
+    )
+else:
+    FLOWER_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Configuração
@@ -72,6 +77,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 # CORS — permite chamadas do frontend
@@ -84,8 +90,13 @@ app.add_middleware(
 )
 
 # Dispositivo
-DEVICE = get_device(verbose=True)
-DEVICE_STR = get_device_str(verbose=False)
+# Gradient matching uses second derivatives: preserve float32 precision on RTX.
+torch.backends.cudnn.allow_tf32 = False
+torch.backends.cuda.matmul.allow_tf32 = False
+if is_showcase():
+    torch.set_num_threads(1)
+DEVICE = get_device(verbose=True, requested="cpu" if is_showcase() else None)
+DEVICE_STR = "cpu" if is_showcase() else get_device_str(verbose=False)
 
 # Dataset e modelo globais (carregados sob demanda)
 _dataset: Optional[object] = None
@@ -93,15 +104,45 @@ _model: Optional[torch.nn.Module] = None
 
 
 def get_dataset():
-    """Retorna o dataset CIFAR-100 (lazy load)."""
+    """Use a complete local copy when present, otherwise fetch only demo rows."""
     global _dataset
+    if is_showcase():
+        return ShowcaseDataset()
     if _dataset is None:
-        _dataset = get_raw_cifar100(download=True)
+        source = os.environ.get("DLG_DATA_SOURCE", "auto").strip().lower()
+        if source not in {"auto", "local", "huggingface"}:
+            raise ValueError("DLG_DATA_SOURCE deve ser auto, local ou huggingface.")
+        if source != "huggingface":
+            try:
+                _dataset = get_raw_cifar100(download=False)
+            except RuntimeError:
+                if source == "local":
+                    raise RuntimeError("CIFAR-100 local ausente. Prepare o dataset ou use DLG_DATA_SOURCE=auto.")
+        if _dataset is None:
+            _dataset = OnlineCifar100()
+            logger.info("CIFAR-100: imagens sob demanda via Hugging Face, com cache local.")
     return _dataset
 
 
-def get_model() -> torch.nn.Module:
+def resolve_request_device(requested):
+    try:
+        device = get_device(verbose=False, requested="cpu" if is_showcase() else requested)
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return device, device.type
+
+
+def enforce_showcase(kind, request=None):
+    try:
+        validate_showcase(kind, request)
+    except ValueError as error:
+        raise HTTPException(status_code=422 if kind == "attack" else 403, detail=str(error)) from error
+
+
+def get_model(device=None) -> torch.nn.Module:
     """Retorna o modelo LeNet base (lazy load)."""
+    if device is not None:
+        return create_lenet(num_classes=100, device=device, seed=50)
     global _model
     if _model is None:
         _model = create_lenet(num_classes=100, device=DEVICE, seed=50)
@@ -132,7 +173,7 @@ def tensor_to_base64(t: torch.Tensor) -> str:
 def compute_model_accuracy(
     model: torch.nn.Module,
     device: torch.device,
-) -> dict:
+) -> dict | None:
     """
     Calcula a acurácia do modelo no conjunto de teste CIFAR-100.
 
@@ -146,6 +187,9 @@ def compute_model_accuracy(
         - test_loss: loss média no teste.
         - num_test_samples: número de amostras de teste.
     """
+    if is_showcase():
+        return None
+    report("metrics", "Avaliando acurácia no conjunto de teste local, quando disponível")
     from torch.utils.data import DataLoader
     from torchvision import datasets
 
@@ -157,9 +201,13 @@ def compute_model_accuracy(
         ),
     ])
 
-    test_dataset = datasets.CIFAR100(
-        "~/.torch", train=False, transform=test_transform, download=False
-    )
+    try:
+        test_dataset = datasets.CIFAR100(
+            get_data_root(), train=False, transform=test_transform, download=False
+        )
+    except RuntimeError:
+        logger.info("Acurácia não calculada: conjunto de teste completo ausente no cache.")
+        return None
     test_loader = DataLoader(
         test_dataset, batch_size=256, shuffle=False, num_workers=0
     )
@@ -199,6 +247,7 @@ def compute_model_accuracy(
 
 class AttackRequest(BaseModel):
     """Requisição para executar ataque DLG."""
+    device: Literal["auto", "cpu", "cuda"] = "auto"
     batch_size: int = Field(default=3, ge=1, le=8, description="Número de imagens no batch")
     num_iters: int = Field(default=800, ge=10, le=5000, description="Iterações do ataque")
     seed: int = Field(default=50, description="Semente para reprodutibilidade")
@@ -211,6 +260,8 @@ class AttackRequest(BaseModel):
     @validator("image_indices")
     def validate_indices(cls, v, values):
         if v is not None and "batch_size" in values:
+            if any(idx < 0 or idx >= 50000 for idx in v):
+                raise ValueError("image_indices deve conter índices entre 0 e 49999")
             if len(v) != values["batch_size"]:
                 raise ValueError(f"image_indices deve ter tamanho igual a batch_size ({values['batch_size']})")
         return v
@@ -227,6 +278,7 @@ class DefenseRequest(AttackRequest):
 
 class FederatedRequest(BaseModel):
     """Requisição para simulação federada."""
+    device: Literal["auto", "cpu", "cuda"] = "auto"
     num_clients: int = Field(default=2, ge=2, le=10, description="Número de clientes")
     num_rounds: int = Field(default=5, ge=1, le=50, description="Rodadas de agregação")
     defense_type: str = Field(default="none", description="Defesa: 'none', 'noisy', 'sparse', 'pruning'")
@@ -279,6 +331,24 @@ class HealthResponse(BaseModel):
     cuda_available: bool
 
 
+@app.post("/api/experiments/{kind}/stream")
+async def experiment_progress_stream(kind: Literal["attack", "defense", "federated"], payload: dict):
+    from pydantic import ValidationError
+    request_type, operation = {
+        "attack": (AttackRequest, run_attack),
+        "defense": (DefenseRequest, run_defense),
+        "federated": (FederatedRequest, run_federated),
+    }[kind]
+    try:
+        request = request_type.model_validate(payload)
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    enforce_showcase(kind, request)
+    return StreamingResponse(stream_experiment(lambda: operation(request), allow_queue=not is_showcase()),
+                             media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
 class DistributionRequest(BaseModel):
     num_clients: int = Field(default=10, ge=2, le=50)
     partitioner_type: str = Field(default="iid", description="iid ou dirichlet")
@@ -297,6 +367,8 @@ def health_check():
         "device": DEVICE_STR,
         "flower_available": FLOWER_AVAILABLE,
         "cuda_available": torch.cuda.is_available(),
+        "mode": "showcase" if is_showcase() else "full",
+        "showcase": {"iterations": list(ITERATIONS), "pair_iterations": list(PAIR_ITERATIONS), "samples": list(SAMPLE_IDS), "max_batch_size": MAX_BATCH_SIZE} if is_showcase() else None,
     }
 
 
@@ -306,7 +378,9 @@ def data_distribution(request: DistributionRequest):
     Usa flwr_datasets para gerar a distribuição de partições e
     retorna a contagem de classes por cliente para o frontend.
     """
+    enforce_showcase("distribution")
     try:
+        configure_huggingface_cache()
         from flwr_datasets import FederatedDataset
         from flwr_datasets.partitioner import IidPartitioner, DirichletPartitioner
         import numpy as np
@@ -370,10 +444,15 @@ async def run_attack(request: AttackRequest):
     """
     Executa o ataque DLG standalone.
     """
+    enforce_showcase("attack", request)
+    if is_showcase() and reporter.get() is None:
+        raise HTTPException(status_code=403, detail="Inicie a demonstração pelo acompanhamento do experimento. A API sem acompanhamento está disponível na versão completa.")
+    DEVICE, DEVICE_STR = resolve_request_device(request.device)
     try:
         set_seed(request.seed)
+        report("preparing", "Carregando as imagens do experimento")
         dataset = get_dataset()
-        model = get_model()
+        model = get_model(DEVICE)
         model.eval()
         tp = get_image_transform()
 
@@ -469,8 +548,10 @@ async def run_attack(request: AttackRequest):
         ]
 
         accuracy = compute_model_accuracy(model, DEVICE)
-        from src.federated_flower import parameter_sparsity_stats
-        sp_stats = parameter_sparsity_stats(model, only_prunable_weights=True)
+        sp_stats = None
+        if not is_showcase():
+            from src.federated_flower import parameter_sparsity_stats
+            sp_stats = parameter_sparsity_stats(model, only_prunable_weights=True)
 
         snapshot_images: list[list[str]] = []
         snapshot_iters: list[int] = []
@@ -499,13 +580,15 @@ async def run_attack(request: AttackRequest):
             snapshot_images=snapshot_images,
             accuracy_metrics=accuracy,
             sparsity_stats=sp_stats,
-            message="Ataque DLG centralizado concluído com sucesso.",
+            message=("Ataque DLG centralizado concluído com sucesso."
+                     + (" Entrada: Hugging Face Viewer (pode incluir recompressão JPEG)."
+                        if isinstance(dataset, OnlineCifar100) else "")),
             per_image_metrics=per_image_metrics,
         )
 
     except Exception as e:
         logger.exception("Erro no ataque DLG")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503 if isinstance(e, OnlineDataUnavailable) else 500, detail=str(e))
 
 
 @app.post("/api/run-defense", response_model=AttackResponse)
@@ -513,10 +596,13 @@ async def run_defense(request: DefenseRequest):
     """
     Executa o ataque DLG com defesas aplicadas aos gradientes.
     """
+    enforce_showcase("defense", request)
+    DEVICE, DEVICE_STR = resolve_request_device(request.device)
     try:
         set_seed(request.seed)
+        report("preparing", "Carregando as imagens do experimento")
         dataset = get_dataset()
-        model = get_model()
+        model = get_model(DEVICE)
         model.eval()
         tp = get_image_transform()
 
@@ -675,13 +761,15 @@ async def run_defense(request: DefenseRequest):
             message=(
                 f"Ataque com defesa '{request.defense_type}' concluído. "
                 f"SSIM médio: {metrics_dict['ssim_mean']:.4f}"
+                + (" Entrada: Hugging Face Viewer (pode incluir recompressão JPEG)."
+                   if isinstance(dataset, OnlineCifar100) else "")
             ),
             per_image_metrics=per_image_metrics,
         )
 
     except Exception as e:
         logger.exception("Erro no ataque com defesa")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503 if isinstance(e, OnlineDataUnavailable) else 500, detail=str(e))
 
 
 @app.post("/api/federated")
@@ -689,6 +777,8 @@ async def run_federated(request: FederatedRequest):
     """
     Inicia uma simulação de Aprendizado Federado com Flower.
     """
+    enforce_showcase("federated", request)
+    DEVICE, DEVICE_STR = resolve_request_device(request.device)
     if not FLOWER_AVAILABLE:
         raise HTTPException(
             status_code=501,

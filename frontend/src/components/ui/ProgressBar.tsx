@@ -10,7 +10,7 @@ interface ProgressBarProps {
 }
 
 /**
- * Indicador de progresso estimado, com preenchimento sólido.
+ * Indicador de progresso informado, com preenchimento sólido.
  */
 export function ProgressBar({
   value,
@@ -45,7 +45,7 @@ export function ProgressBar({
           heights[size],
         )}
         role="progressbar"
-        aria-label={label || "Progresso estimado"}
+        aria-label={label || "Progresso"}
         aria-valuenow={clamped}
         aria-valuemin={0}
         aria-valuemax={100}

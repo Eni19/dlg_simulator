@@ -1,0 +1,13 @@
+.venv/
+.dist/
+.taste-skill/
+.impeccable/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/*.pyc
+**/*.ipynb
+tests/
+frontend/tests/
+.env*
+!.env.example

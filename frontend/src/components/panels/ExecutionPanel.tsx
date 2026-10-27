@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Terminal, type LogLine } from "@/components/ui/Terminal";
 import type { AttackConfig } from "@/lib/types";
+import { defenseLabel as describeDefense } from "@/lib/types";
+import type { ExperimentProgress } from "@/lib/api";
 import { Play, Square, Shield, Zap } from "lucide-react";
 
 interface ExecutionPanelProps {
@@ -10,6 +12,7 @@ interface ExecutionPanelProps {
   isRunning: boolean;
   logs: LogLine[];
   progress: number; // 0–100
+  telemetry: ExperimentProgress | null;
   onStart: () => void;
   onAbort: () => void;
 }
@@ -23,13 +26,14 @@ export function ExecutionPanel({
   isRunning,
   logs,
   progress,
+  telemetry,
   onStart,
   onAbort,
 }: ExecutionPanelProps) {
   const envLabel =
     config.environment === "federated" ? "Federado (Flower)" : "Centralizado";
   const defenseLabel =
-    config.defense === "none" ? "Sem defesa" : `Defesa: ${config.defense}`;
+    describeDefense(config.defense);
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -38,7 +42,7 @@ export function ExecutionPanel({
         <div className="flex flex-col items-center gap-5 py-4 sm:flex-row sm:justify-between">
           <div className="text-center sm:text-left">
             <h3 className="text-lg font-bold text-white">
-              {isRunning ? "Ataque em Execução" : "Pronto para Iniciar"}
+              {isRunning ? "A reconstrução está em andamento" : "Pronto para experimentar?"}
             </h3>
             <p className="mt-1 text-sm text-graphite-400">
               {envLabel} · Batch {config.batchSize} · {config.numIters}{" "}
@@ -63,7 +67,7 @@ export function ExecutionPanel({
                 icon={<Play className="h-4 w-4" />}
                 onClick={onStart}
               >
-                Iniciar Ataque DLG
+                Iniciar experimento
               </Button>
             )}
           </div>
@@ -72,14 +76,21 @@ export function ExecutionPanel({
         {/* Barra de Progresso */}
         {isRunning && (
           <div className="mt-2">
-            <ProgressBar
+            {telemetry?.total != null && telemetry.current != null ? <ProgressBar
               value={progress}
               size="lg"
-              label="Progresso estimado no navegador"
-            />
+              label={telemetry.phase === "optimizing" ? "Ciclos DLG concluídos" : "Rodadas federadas concluídas"}
+            /> : null}
+            <p className="mt-2 text-sm" role="status" aria-live="polite">
+              {telemetry?.text || "Conectando ao acompanhamento do experimento"}
+              {telemetry?.total != null && telemetry.current != null
+                ? ` · ${telemetry.current} de ${telemetry.total}` : ""}
+              {telemetry?.loss != null ? ` · loss ${telemetry.loss.toExponential(3)}` : ""}
+            </p>
             <p className="mt-2 text-center text-xs text-graphite-500">
-              Estimativa local, sem telemetria de iterações. Cancelar a espera
-              não garante interromper o servidor.
+              Contagem enviada pelo backend, sem estimativa de tempo restante.
+              Um ciclo percorre as imagens do grupo e pode exigir vários ajustes internos.
+              Cancelar a espera não garante interromper o servidor.
             </p>
           </div>
         )}
@@ -94,8 +105,8 @@ export function ExecutionPanel({
             icon: Zap,
           },
           {
-            label: "Batch Size",
-            value: `${config.batchSize} imagens`,
+            label: "Imagens por vez",
+            value: `${config.batchSize} ${config.batchSize === 1 ? "imagem" : "imagens"}`,
             icon: Zap,
           },
           {
@@ -125,14 +136,14 @@ export function ExecutionPanel({
       </div>
 
       <p className="text-sm text-graphite-400">
-        As etapas explicativas abaixo ilustram o algoritmo. Apenas a resposta
-        final confirma o resultado da execução.
+        Acompanhe abaixo as etapas reais da execução. Depois dos ajustes,
+        o laboratório compara a reconstrução com o original e calcula as medidas de semelhança.
       </p>
       {/* Terminal de Logs */}
       <Terminal
         logs={logs}
         isRunning={isRunning}
-        title={`DLG Attack · ${envLabel}`}
+        title={`Etapas · ${envLabel}`}
         maxLines={30}
       />
     </div>

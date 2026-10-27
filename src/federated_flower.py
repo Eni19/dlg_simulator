@@ -31,6 +31,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .progress import report
 from torch.utils.data import DataLoader, Subset
 
 # Flower — NumPyClient é a única dependência real necessária
@@ -47,6 +48,7 @@ except ImportError:
     )
 
 from .models import LeNet, create_lenet, weights_init
+from .runtime_paths import get_data_root
 from .utils import (
     cross_entropy_for_onehot,
     get_cifar100_data,
@@ -739,7 +741,7 @@ def create_clients(
     device: str = "cpu",
     defense_type: str = "none",
     defense_params: dict | None = None,
-    data_root: str = "~/.torch",
+    data_root: str | None = None,
     seed: int = 50,
     attacker_client: bool = False,
     dlg_num_iters: int = 800,
@@ -778,7 +780,7 @@ def create_clients(
     ])
 
     train_dataset = datasets.CIFAR100(
-        data_root, train=True, transform=train_transform, download=True
+        get_data_root(data_root), train=True, transform=train_transform, download=True
     )
 
     # Particionamento IID: cada cliente recebe ~1/num_clients dos dados
@@ -882,7 +884,7 @@ def start_federated_simulation(
     pruning_amount: float = 0.0,
     device: str | None = None,
     seed: int = 50,
-    data_root: str = "~/.torch",
+    data_root: str | None = None,
     attacker_enabled: bool = True,
     attacker_role: str = "malicious_server",
     verbose: bool = True,
@@ -933,7 +935,7 @@ def start_federated_simulation(
         device = get_device(verbose=verbose)
 
     if verbose:
-        mode = "CPU" if device == "cpu" else "CUDA"
+        mode = torch.device(device).type.upper()
         print(f"\n{'='*70}")
         print(f" Simulação Federada — FedAvg Manual + DLG Attack")
         print(f" Clientes: {num_clients} | Rodadas: {num_rounds}")
@@ -947,6 +949,7 @@ def start_federated_simulation(
         defense_params.setdefault("amount", pruning_amount)
 
     # Criar clientes
+    report("preparing", "Preparando dataset e clientes federados")
     clients = create_clients(
         num_clients=num_clients,
         device=device,
@@ -974,6 +977,7 @@ def start_federated_simulation(
     # LOOP DE RODADAS FEDAVG
     # ═══════════════════════════════════════════════════════════════
     for round_idx in range(1, num_rounds + 1):
+        report("training", f"Treino federado: rodada {round_idx}/{num_rounds}", round_idx - 1, num_rounds)
         if verbose:
             print(f"\n--- Rodada {round_idx}/{num_rounds} ---")
 
@@ -1010,6 +1014,7 @@ def start_federated_simulation(
             "avg_loss": float(avg_loss),
             "total_examples": total_ex,
         })
+        report("training", f"Rodada {round_idx}/{num_rounds} agregada", round_idx, num_rounds)
 
         if verbose:
             print(f"  [Servidor] Agregado — loss média: {avg_loss:.4f}")

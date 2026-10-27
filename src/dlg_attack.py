@@ -36,6 +36,7 @@ from typing import Callable, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .progress import report
 
 from .losses import (
     COSINE_WEIGHT,
@@ -203,7 +204,8 @@ class DLGAttack:
             dummy_data_list = []
             for k in range(self.batch_size):
                 # Base: ruído uniforme
-                base = torch.rand(1, 3, 32, 32, device=self.device)
+                # CPU RNG gives the same starting noise for a seed on each device.
+                base = torch.rand(1, 3, 32, 32).to(self.device)
 
                 # Hint espectral da primeira camada convolucional
                 input_grad = target_gradients[0]  # [out_ch=12, in_ch=3, kH=5, kW=5]
@@ -234,7 +236,8 @@ class DLGAttack:
             logit_init = torch.zeros(1, self.num_classes, device=self.device)
             lbl = pred_labels[k % len(pred_labels)].item()
             logit_init[0, lbl] = 5.0
-            logit_init = logit_init + 0.1 * torch.randn_like(logit_init)
+            noise = torch.randn(logit_init.shape, dtype=logit_init.dtype).to(self.device)
+            logit_init = logit_init + 0.1 * noise
             dummy_label_list.append(
                 logit_init.clamp(-LOGIT_CLAMP, LOGIT_CLAMP).requires_grad_(True)
             )
@@ -374,6 +377,7 @@ class DLGAttack:
         last_valid_loss: float | None = None
 
         total_cycles = self.num_iters // self.batch_size
+        report("optimizing", experiment_name, 0, total_cycles)
         _loss_log: list[float | None] = [None]
 
         # Checkpoints para snapshots da reconstrução
@@ -566,6 +570,8 @@ class DLGAttack:
                 snapshots.append(snap.cpu().clone())
                 snapshot_iters.append(cycle * self.batch_size)
 
+            report("optimizing", experiment_name, cycle + 1, total_cycles, _loss_log[0])
+
             # Logging
             current_loss = _loss_log[0]
             if cycle % 10 == 0 and current_loss is not None:
@@ -586,6 +592,7 @@ class DLGAttack:
         # ═══════════════════════════════════════════════════════════════
         # Consolidação dos resultados
         # ═══════════════════════════════════════════════════════════════
+        report("finalizing", "Consolidando reconstruções e snapshots")
         reconstructed = torch.cat(
             [
                 torch.nan_to_num(d.data, nan=0.0, posinf=1.0, neginf=0.0).clamp(0, 1)

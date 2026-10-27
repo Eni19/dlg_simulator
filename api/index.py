@@ -1,32 +1,8 @@
-"""
-Ponto de entrada serverless para Vercel.
+"""Legacy ASGI alias for tools that still import api.index.
 
-Este arquivo segue o padrão de rotas serverless do Vercel para Python:
-- O diretório api/ contém as funções serverless.
-- Cada arquivo .py exporta um objeto ASGI (no caso, a aplicação FastAPI).
-- O Vercel detecta automaticamente o framework e configura as rotas.
-
-Para deploy no Vercel:
-    1. Configure o build command: pip install -r requirements.txt
-    2. O Vercel usará este arquivo como entrypoint para /api/*
-    3. As rotas definidas em app.py ficam acessíveis como:
-       /api/health, /api/run-attack, /api/run-defense, /api/federated
-
-Configuração recomendada do vercel.json:
-{
-    "builds": [
-        {
-            "src": "api/index.py",
-            "use": "@vercel/python"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/api/(.*)",
-            "dest": "api/index.py"
-        }
-    ]
-}
+Vercel Services uses app:app from the repository root. Public requests enter
+through the gateway service and its runtime binding; see vercel.json and
+DEPLOYMENT.md. Do not restore the former top-level builds/routes config.
 """
 
 import sys

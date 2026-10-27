@@ -1,5 +1,6 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import type { AttackConfig } from "@/lib/types";
+import { defenseLabel as describeDefense } from "@/lib/types";
 import {
   Server,
   Users,
@@ -26,8 +27,8 @@ interface FederatedFlowPanelProps {
  * 1. Servidor → distribui modelo global para clientes
  * 2. Cada cliente treina localmente com seus dados privados
  * 3. Atacante intercepta gradientes do cliente alvo
- * 4. DLG reconstrói imagens a partir dos gradientes
- * 5. Servidor agrega (FedAvg) os modelos atualizados
+ * 4. Servidor combina as atualizações a cada rodada
+ * 5. Após as rodadas, DLG tenta reconstruir as imagens
  */
 export function FederatedFlowPanel({
   config,
@@ -36,14 +37,7 @@ export function FederatedFlowPanel({
   const numClients = config.flClients;
   const numRounds = config.flRounds;
   const defense = config.defense;
-  const defenseLabel =
-    defense === "none"
-      ? "Sem defesa"
-      : defense === "noisy"
-        ? "Ruído Gaussiano"
-        : defense === "sparse"
-          ? "Gradiente Esparso"
-          : "Model Pruning";
+  const defenseLabel = describeDefense(defense);
 
   const isServer = config.attackerRole === "malicious_server";
   const isClient = config.attackerRole === "malicious_client";
@@ -59,21 +53,21 @@ export function FederatedFlowPanel({
   const interceptorLabel = isServer
     ? "Servidor"
     : isClient
-      ? "Cliente Atacante"
-      : "Rede (MitM)";
+      ? "Outro participante"
+      : "Alguém na rede";
   const interceptorDesc = isServer
-    ? "Espiona Gradientes"
+    ? "Observa os gradientes"
     : isClient
-      ? "Infere Atualizações"
-      : "Intercepta Pacotes";
+      ? "Estima as contribuições"
+      : "Observa atualizações em trânsito";
 
   return (
     <div className="space-y-6 animate-slide-up">
       {/* Explicação visual interativa do fluxo */}
       <Card>
         <CardHeader
-          title="Arquitetura do Ataque Federado"
-          subtitle="Acompanhe o ciclo de vida dos dados: desde o servidor até a reconstrução maliciosa."
+          title="O caminho das pistas no aprendizado em conjunto"
+          subtitle="Este diagrama explica o cenário simulado. O andamento da execução aparece nos contadores acima."
         />
         <div className="space-y-6">
           {/* Animação de fluxo */}
@@ -89,7 +83,7 @@ export function FederatedFlowPanel({
               <FlowBox
                 icon={<Users className="h-8 w-8" />}
                 label={`${numClients} Clientes`}
-                sub="Treino Local Privado"
+                sub="Cada um aprende com seus exemplos"
                 color="  border-emerald-500/40 text-emerald-400 "
               />
               <FlowArrow animated highlight />
@@ -102,18 +96,18 @@ export function FederatedFlowPanel({
               />
               <FlowArrow animated highlight />
               <FlowBox
-                icon={<Zap className="h-8 w-8" />}
-                label="Ataque DLG"
-                sub="Reconstrução LBFGS"
-                color="  border-red-500/50 text-red-400  ring-1 ring-red-500/50"
-                highlight
-              />
-              <FlowArrow animated />
-              <FlowBox
                 icon={<ArrowLeftRight className="h-8 w-8" />}
                 label="FedAvg"
-                sub="Agregação"
+                sub="Combina as atualizações"
                 color="  border-emerald-500/40 text-emerald-400 "
+              />
+              <FlowArrow animated highlight />
+              <FlowBox
+                icon={<Zap className="h-8 w-8" />}
+                label="Ataque DLG"
+                sub="Tentativa de reconstrução"
+                color="  border-red-500/50 text-red-400  ring-1 ring-red-500/50"
+                highlight
               />
             </div>
           </div>
@@ -121,18 +115,18 @@ export function FederatedFlowPanel({
           {/* Legendas em grade */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <InfoCard
-              title="Ameaça de Privacidade"
-              text="Gradientes carregam a 'assinatura' dos dados. O DLG explora essa assinatura invertendo a otimização."
+              title="O que pode ser revelado?"
+              text="Os gradientes podem carregar informações sobre os exemplos de treino. O ataque tenta recuperar uma imagem a partir dessas pistas."
               icon={<Eye className="h-4 w-4 text-amber-400" />}
             />
             <InfoCard
-              title="Ciclo de Treinamento"
-              text={`Por ${numRounds} rodadas, o servidor central distribui o modelo, clientes treinam e enviam atualizações, e o servidor faz a média (FedAvg).`}
+              title="Aprender, compartilhar e combinar"
+              text={`Durante ${numRounds} rodadas, os participantes aprendem localmente. O servidor combina suas atualizações por uma média chamada FedAvg.`}
               icon={<ArrowLeftRight className="h-4 w-4 text-blue-400" />}
             />
             <InfoCard
-              title="Snapshot Essencial"
-              text="O ataque copia o modelo exato (pesos congelados) ANTES do passo do otimizador local, garantindo compatibilidade no DLG."
+              title="O ponto de partida do ataque"
+              text="O programa guarda uma cópia do modelo no momento do cálculo dos gradientes. Essa cópia ajuda a comparar pistas geradas nas mesmas condições."
               icon={<Cpu className="h-4 w-4 text-emerald-400" />}
             />
             <InfoCard
@@ -141,12 +135,12 @@ export function FederatedFlowPanel({
               }
               text={
                 defense === "none"
-                  ? "Cenário ideal para o atacante: gradientes fiéis permitem reconstrução quase perfeita dos dados."
+                  ? "As pistas ficam disponíveis sem uma defesa adicional. O que será recuperado depende das imagens e dos ajustes da busca."
                   : defense === "noisy"
-                    ? "Ruído mascara os gradientes, causando imagens embaçadas na reconstrução."
+                    ? "Variações aleatórias alteram as pistas compartilhadas. Compare quanto isso dificulta a reconstrução."
                     : defense === "sparse"
-                      ? "Gradientes menores são podados, removendo detalhes de alta frequência."
-                      : "Poda de pesos dificulta o pareamento no LBFGS se o atacante não for informado."
+                      ? "Parte dos gradientes é zerada antes do compartilhamento, reduzindo as informações disponíveis."
+                      : "Parte das conexões do modelo é removida. O efeito também depende de o ataque conhecer essa mudança."
               }
               icon={
                 <Shield
@@ -164,7 +158,7 @@ export function FederatedFlowPanel({
           title={
             <span className="flex items-center gap-2">
               <Layers className="h-5 w-5 text-emerald-400" />
-              Detalhamento Passo a Passo
+              Acompanhe a ideia, passo a passo
             </span>
           }
           subtitle="O que acontece nos bastidores em cada estágio"
@@ -173,16 +167,16 @@ export function FederatedFlowPanel({
           {/* Estágios numerados */}
           <FlowStage
             num={1}
-            title="Distribuição do Modelo (Servidor)"
-            description="O servidor transmite os pesos globais atualizados da rede LeNet para todos os clientes participando da rodada."
+            title="Todos recebem uma versão do modelo"
+            description="O servidor envia o modelo compartilhado aos participantes. Ele serve como ponto de partida para o aprendizado daquela rodada."
             icon={<Server className="h-5 w-5" />}
             color="blue"
           />
 
           <FlowStage
             num={2}
-            title="Treinamento Local (Clientes)"
-            description={`Os ${numClients} clientes recebem o modelo global e começam a treinar localmente. Cada cliente calcula a perda (Loss) comparando as predições do modelo com seus dados privados reais. Em seguida, utilizam retropropagação (Backpropagation) para gerar os gradientes (as atualizações de peso necessárias para aprender com aqueles dados).`}
+            title="Cada participante aprende com seus exemplos"
+            description={`Os ${numClients} participantes comparam as respostas do modelo com as categorias das imagens. A diferença orienta os ajustes. Esse cálculo gera os gradientes, as pistas que investigamos aqui. Os exemplos são imagens públicas separadas entre participantes simulados.`}
             icon={<Users className="h-5 w-5" />}
             color="emerald"
           >
@@ -228,8 +222,8 @@ export function FederatedFlowPanel({
                       {isAttacker
                         ? isClient
                           ? "Atua normalmente, mas usa o modelo global para deduzir as atualizações dos outros."
-                          : "Tem seus pacotes interceptados ao serem enviados."
-                        : "Treina de forma honesta e prepara seus gradientes."}
+                          : "Suas atualizações são observadas no cenário simulado."
+                        : "Aprende com seus exemplos e prepara as atualizações."}
                     </p>
                     {defense !== "none" && (
                       <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-graphite-700 bg-graphite-950 px-2.5 py-1 text-[10px] font-medium text-graphite-300">
@@ -247,17 +241,17 @@ export function FederatedFlowPanel({
             num={3}
             title={
               isServer
-                ? "O Servidor Curioso (Interceptação)"
+                ? "O servidor observa as atualizações"
                 : isClient
-                  ? "A Inferência (Cliente Malicioso)"
-                  : "O Homem no Meio (MitM)"
+                  ? "Um participante tenta separar as contribuições"
+                  : "Alguém observa as atualizações na rede"
             }
             description={
               isServer
-                ? "Como o Servidor Central coordena a rodada, ele recebe os pacotes de gradientes brutos de cada cliente individualmente. Ao final de uma rodada de treino (ex: Rodada 1), antes de realizar a média aritmética (FedAvg), o servidor separa a atualização enviada pelo Cliente Alvo. Essa atualização contém a 'assinatura matemática' exata das imagens locais daquele cliente."
+                ? "Neste cenário, o coordenador recebe as atualizações dos participantes. O laboratório simula esse acesso e usa as pistas do participante escolhido numa tentativa de reconstrução."
                 : isClient
-                  ? "Na transição para a próxima rodada, o servidor devolve o modelo global agregado (média de todos). O Cliente Malicioso sabe exatamente quais gradientes ele próprio enviou na rodada anterior. Através de subtração algébrica simples (Modelo Global Agregado - Contribuição Própria), o atacante isola perfeitamente os gradientes originais da vítima (funciona melhor quando há apenas 2 clientes)."
-                  : "Logo após o fim do treino local, o cliente transmite seus gradientes não-criptografados para a nuvem. Um atacante (escutando a rede Wi-Fi, ou comprometendo o provedor de internet) faz o 'sniffing' desse tráfego. Ele não tem acesso ao servidor nem ao dispositivo do cliente, mas rouba o pacote de gradientes no momento do envio."
+                  ? "Um participante conhece sua própria contribuição e observa a atualização combinada. Ele tenta usar essa informação para estimar o que veio dos demais. Esse cenário depende do número de participantes e do que está disponível para observação."
+                  : "O laboratório supõe que alguém consegue observar as atualizações em trânsito entre um participante e o servidor. Essa é uma condição simulada para estudar o ataque."
             }
             icon={
               isServer ? (
@@ -274,20 +268,21 @@ export function FederatedFlowPanel({
 
           <FlowStage
             num={4}
-            title="Otimização DLG (Deep Leakage from Gradients)"
-            description={`É aqui que a mágica acontece, fora do fluxo oficial. O atacante congela o modelo global da rodada e gera uma "imagem de ruído" (Dummy Image). O algoritmo então passa essa imagem pelo modelo congelado para obter os "Gradientes Dummy". Uma função de perda (Loss) calcula a distância entre os Gradientes Dummy e os Gradientes Interceptados. Usando o potente otimizador L-BFGS por ${config.numIters} iterações, o atacante altera iterativamente os pixels da imagem de ruído até que a distância entre os gradientes chegue a zero. Quando os gradientes se igualam, a imagem gerada se torna idêntica à foto privada original.`}
+            title="As contribuições formam um novo modelo"
+            description="O servidor combina as atualizações numa média ponderada, o FedAvg. A versão resultante é compartilhada na rodada seguinte, e esse aprendizado se repete pelo número de rodadas escolhido."
+            icon={<ArrowLeftRight className="h-5 w-5" />}
+            color="violet"
+          />
+
+          <FlowStage
+            num={5}
+            title="Uma imagem é ajustada para explicar as pistas"
+            description={`Depois da última rodada, este simulador tenta reconstruir as imagens a partir das pistas capturadas. O ataque começa com uma imagem ruidosa e compara os gradientes dela com os observados. Com ${config.numIters} iterações configuradas, a busca modifica a imagem para aproximar essas pistas. A qualidade da reconstrução varia conforme o cenário.`}
             icon={<Zap className="h-5 w-5" />}
             color="red"
             highlight
           />
 
-          <FlowStage
-            num={5}
-            title="Agregação FedAvg (Servidor)"
-            description="O servidor recebe as atualizações, incluindo a do atacante. Calcula a média e o ciclo recomeça, cego ao vazamento de dados."
-            icon={<ArrowLeftRight className="h-5 w-5" />}
-            color="violet"
-          />
         </div>
       </Card>
     </div>

@@ -20,15 +20,19 @@ import torch
 import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torchvision import datasets, transforms
+from .runtime_paths import get_data_root
 
 
 # ---------------------------------------------------------------------------
 # Dispositivo e Reprodutibilidade
 # ---------------------------------------------------------------------------
 
-def get_device(verbose: bool = True) -> torch.device:
+def get_device(verbose: bool = True, requested: str | None = None) -> torch.device:
     """
     Detecta o melhor dispositivo disponível para computação.
+
+    DLG_DEVICE=cpu ou cuda força o dispositivo; auto é o padrão.
+    CUDA explícito indisponível gera erro em vez de fallback silencioso.
 
     Ordem de prioridade:
         1. CUDA (NVIDIA GPU) — melhor performance
@@ -47,10 +51,22 @@ def get_device(verbose: bool = True) -> torch.device:
     """
     import os
 
-    # CUDA sempre tem prioridade máxima
-    if torch.cuda.is_available():
+    requested = (requested if requested is not None else os.environ.get("DLG_DEVICE", "auto")).strip().lower()
+    if requested not in {"auto", "cpu", "cuda"}:
+        raise ValueError("DLG_DEVICE deve ser auto, cpu ou cuda.")
+    if requested == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "DLG_DEVICE=cuda, mas CUDA está indisponível. "
+            "Instale o PyTorch CUDA na venv e verifique o driver NVIDIA."
+        )
+
+    # A seleção explícita permite comparar CPU/GPU sem alterar o código.
+    if requested == "cpu":
+        device = torch.device("cpu")
+        label = "CPU (DLG_DEVICE=cpu)"
+    elif torch.cuda.is_available():
         device = torch.device("cuda")
-        label = "CUDA"
+        label = f"CUDA ({torch.cuda.get_device_name(device)})"
     elif os.environ.get("DLG_USE_DML") == "1":
         try:
             import torch_directml  # type: ignore[import-untyped]
@@ -114,7 +130,7 @@ CIFAR100_STD = (0.2675, 0.2565, 0.2761)
 
 
 def get_cifar100_data(
-    root: str = "~/.torch",
+    root: str | None = None,
     batch_size: int = 128,
     num_workers: int = 2,
     pin_memory: bool = True,
@@ -146,10 +162,10 @@ def get_cifar100_data(
     ])
 
     train_dataset = datasets.CIFAR100(
-        root, train=True, transform=train_transform, download=download
+        get_data_root(root), train=True, transform=train_transform, download=download
     )
     test_dataset = datasets.CIFAR100(
-        root, train=False, transform=test_transform, download=download
+        get_data_root(root), train=False, transform=test_transform, download=download
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -171,7 +187,7 @@ def get_cifar100_data(
 
 
 def get_raw_cifar100(
-    root: str = "~/.torch",
+    root: str | None = None,
     download: bool = True,
 ) -> datasets.CIFAR100:
     """
@@ -185,7 +201,7 @@ def get_raw_cifar100(
     Returns:
         Dataset CIFAR-100 (sem transform).
     """
-    return datasets.CIFAR100(root, download=download)
+    return datasets.CIFAR100(get_data_root(root), download=download)
 
 
 # Transformações para imagens individuais

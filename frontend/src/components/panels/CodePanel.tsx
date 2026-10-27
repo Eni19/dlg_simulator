@@ -11,7 +11,7 @@ const files = [
     path: "src/losses.py",
     title: "A função que guia a reconstrução",
     description:
-      "L2 aproxima a magnitude dos gradientes; cosine similarity aproxima a direção. Total Variation regulariza a imagem e seu coeficiente decai ao longo da otimização.",
+      "Como decidir se uma tentativa está se aproximando das pistas recebidas? Este arquivo reúne os cálculos usados nessa comparação. A função de perda, ou loss, combina a diferença entre gradientes com uma suavização da imagem.",
     source: losses,
     anchor: "def grad_matching_loss(",
     end: "# Perda",
@@ -19,9 +19,9 @@ const files = [
   {
     name: "models.py",
     path: "src/models.py",
-    title: "O modelo alvo",
+    title: "A pequena rede que aprende com as imagens",
     description:
-      "A LeNet do experimento usa quatro camadas convolucionais com ativação Sigmoid e uma camada totalmente conectada para as 100 classes do CIFAR-100.",
+      "O modelo é a parte da IA que transforma uma imagem em uma previsão de categoria. Aqui usamos uma rede LeNet, com camadas que processam imagens pequenas e uma saída para as 100 categorias do CIFAR-100.",
     source: model,
     anchor: "class LeNet(",
     end: "def create_lenet",
@@ -31,7 +31,7 @@ const files = [
     path: "src/dlg_attack.py",
     title: "O motor do ataque",
     description:
-      "O executor reúne inicialização inteligente, otimização LBFGS, fase global periódica, TV adaptativa e label anchoring. Explore a implementação completa no repositório.",
+      "Este é o passo a passo da tentativa de reconstrução: criar uma imagem inicial, calcular suas pistas, comparar e ajustar. O otimizador LBFGS escolhe os ajustes, e o programa registra a evolução da busca.",
     source: attack,
     anchor: "class DLGAttack:",
     end: "",
@@ -39,9 +39,9 @@ const files = [
   {
     name: "federated_flower.py",
     path: "src/federated_flower.py",
-    title: "O cenário distribuído",
+    title: "Como os participantes aprendem juntos",
     description:
-      "Este módulo implementa clientes, agregação e os pontos de interceptação usados pelo cenário federado. As restrições do ambiente permanecem as mesmas do backend original.",
+      "Este arquivo organiza os participantes simulados, combina suas atualizações e define em que momento o ataque recebe acesso às pistas. É a base do cenário de aprendizado federado.",
     source: federated,
     anchor: "",
     end: "",
@@ -76,7 +76,10 @@ export function CodePanel() {
     <section className="code-panel">
       <div className="section-heading">
         <h1>Por dentro do código</h1>
-        <p>Da interface à implementação científica, sem caixa-preta.</p>
+        <p>
+          Quer entender como a ideia virou programa? Escolha uma parte abaixo.
+          Você pode explorar o laboratório sem ler código; este espaço permite ir além.
+        </p>
       </div>
       <div className="source-tabs" aria-label="Arquivos da implementação">
         {files.map((f, i) => (
@@ -123,15 +126,16 @@ export function CodePanel() {
         {showFull ? "Mostrar trecho selecionado" : "Explorar arquivo inteiro"}
       </button>
       <p className="source-note">
-        Trecho carregado diretamente do arquivo Python deste projeto no build. A
-        execução científica acontece no backend FastAPI.
+        Este trecho vem dos arquivos Python do projeto. Os cálculos acontecem
+        no servidor do laboratório, usando PyTorch, uma ferramenta de aprendizado de máquina.
       </p>
       <div className="implementation-path">
         <h2>O caminho de uma execução</h2>
         <p>
-          <code>AttackConfig</code> na interface → <code>/api/run-attack</code>{" "}
-          ou <code>/api/federated</code> → modelo e gradientes → otimização →
-          imagens e métricas.
+          Suas escolhas são enviadas ao servidor. Ele prepara as imagens,
+          calcula os gradientes, executa a busca e devolve as reconstruções e as
+          medidas de comparação. A rota <code>/api/experiments/…/stream</code>{" "}
+          também envia o andamento real enquanto os cálculos acontecem.
         </p>
         <a
           className="text-action"

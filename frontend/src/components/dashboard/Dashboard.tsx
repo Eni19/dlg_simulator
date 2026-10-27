@@ -8,8 +8,9 @@ import {
 } from "react";
 import type { AttackConfig, AttackResponse } from "@/lib/types";
 import { DEFAULT_CONFIG } from "@/lib/types";
+import { SHOWCASE_BUILD, showcaseConfig, SHOWCASE_SAMPLES } from "@/lib/showcase";
 import type { LogLine } from "@/components/ui/Terminal";
-import { checkHealth, runAttack, runFederated } from "@/lib/api";
+import { checkHealth, runExperimentStream, type ExperimentProgress } from "@/lib/api";
 import { uid } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { ExecutionPanel } from "@/components/panels/ExecutionPanel";
@@ -52,7 +53,7 @@ type ActiveTab =
   "overview" | "setup" | "execute" | "results" | "charts" | "code";
 type RunState = "idle" | "running" | "success" | "error";
 const TABS = [
-  { key: "overview" as const, label: "Visão geral", icon: BookOpen },
+  { key: "overview" as const, label: "Comece por aqui", icon: BookOpen },
   { key: "setup" as const, label: "Experimento", icon: SlidersHorizontal },
   { key: "execute" as const, label: "Execução", icon: Play },
   { key: "results" as const, label: "Reconstruções", icon: ScanLine },
@@ -98,13 +99,14 @@ function sanitizeResponse(res: AttackResponse): AttackResponse {
  * Dashboard principal — coordena os 4 steps do fluxo DLG.
  */
 export function Dashboard() {
+  const [isShowcase, setIsShowcase] = useState(SHOWCASE_BUILD);
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     const hash = window.location.hash.slice(1);
     return TABS.some((tab) => tab.key === hash)
       ? (hash as ActiveTab)
       : "overview";
   });
-  const [config, setConfig] = useState<AttackConfig>({ ...DEFAULT_CONFIG });
+  const [config, setConfig] = useState<AttackConfig>(() => SHOWCASE_BUILD ? showcaseConfig() : { ...DEFAULT_CONFIG });
 
   const [runState, setRunState] = useState<RunState>("idle");
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -124,6 +126,9 @@ export function Dashboard() {
         if (live) {
           setHealth("online");
           setDevice(result.device);
+          const showcase = SHOWCASE_BUILD || result.mode === "showcase";
+          setIsShowcase(showcase);
+          if (showcase) setConfig(previous => showcaseConfig(previous));
         }
       })
       .catch(() => {
@@ -139,14 +144,11 @@ export function Dashboard() {
     window.scrollTo({ top: 0, behavior: "instant" });
   };
   const abortRef = useRef<AbortController | null>(null);
-  const logSimRef = useRef<number | null>(null);
-  const progressRef = useRef<number | null>(null);
+  const [telemetry, setTelemetry] = useState<ExperimentProgress | null>(null);
 
-  // Limpa timers ao desmontar
+  // Encerra o acompanhamento ao desmontar.
   useEffect(() => {
     return () => {
-      if (logSimRef.current) clearInterval(logSimRef.current);
-      if (progressRef.current) clearInterval(progressRef.current);
       abortRef.current?.abort();
     };
   }, []);
@@ -173,8 +175,6 @@ export function Dashboard() {
       setRunState(res.success ? "success" : "error");
       setProgress(res.success ? 100 : 0);
 
-      if (logSimRef.current) clearInterval(logSimRef.current);
-      if (progressRef.current) clearInterval(progressRef.current);
 
       if (!res.success) {
         setError(res.message || "Erro desconhecido");
@@ -185,7 +185,7 @@ export function Dashboard() {
           psnr != null && isFinite(psnr) ? psnr.toFixed(1) : "N/A";
         const lossCount = res.lossHistory?.length ?? 0;
         addLog({
-          text: `Ataque concluído — PSNR médio: ${psnrStr} dB (${lossCount} amostras de loss)`,
+          text: `Experimento concluído — PSNR médio: ${psnrStr} dB (${lossCount} registros do erro da busca)`,
           type: "success",
         });
         setActiveTab("results");
@@ -205,7 +205,7 @@ export function Dashboard() {
     setError(null);
     setActiveTab("execute");
 
-    addLog({ text: "Iniciando ataque DLG...", type: "info" });
+    addLog({ text: "Preparando uma tentativa de reconstrução...", type: "info" });
     addLog({
       text: `Ambiente: ${config.environment} · Batch: ${config.batchSize} · Iterações: ${config.numIters}`,
       type: "info",
@@ -221,78 +221,28 @@ export function Dashboard() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Simulador de logs
-    const simMessages = [
-      "Carregando dataset CIFAR-100...",
-      "Instanciando modelo LeNet (Sigmoid)...",
-      "Computando gradientes ground-truth...",
-      "Inicializando reconstrução dummy (smart init)...",
-      "Otimização LBFGS em andamento...",
-      "Round-robin + global phase...",
-      "TV cosine annealing: 1e-5 → 1e-7",
-      "Label anchoring via bias gradients...",
-    ];
-
-    let msgIdx = 0;
-    logSimRef.current = window.setInterval(() => {
-      if (msgIdx < simMessages.length) {
-        addLog({
-          text: `Sobre o algoritmo (etapa ilustrativa): ${simMessages[msgIdx]}`,
-          type: "info",
-        });
-        msgIdx++;
-      }
-    }, 2500);
-
-    // Barra de progresso baseada nos ciclos do ataque
-    // Para DLG centralizado, estima-se baseado nos ciclos e iterações.
-    const totalCycles = Math.floor(
-      config.numIters / Math.max(config.batchSize, 1),
-    );
-    const msPerCycle = 220; // estimativa realista para CPU
-    let estimatedDurationMs = totalCycles * msPerCycle;
-
-    // Se for federado, adicionamos o tempo de treinamento por rodada
-    if (config.environment === "federated") {
-      const msPerClientRound = 800; // estimativa de treino local por cliente
-      const flTime = config.flRounds * config.flClients * msPerClientRound;
-      estimatedDurationMs += flTime;
-    }
-
-    addLog({
-      text: `Duração estimada: ${(estimatedDurationMs / 1000).toFixed(0)}s`,
-      type: "info",
-    });
-
-    const t0 = Date.now();
-    progressRef.current = window.setInterval(() => {
-      const elapsed = Date.now() - t0;
-      // Crescimento assintótico suave até 95% para não travar nos 90%
-      const pct = Math.min(
-        95,
-        Math.round((elapsed / estimatedDurationMs) * 100),
-      );
-      setProgress(pct);
-    }, 200);
-
+    setTelemetry(null);
+    let lastLogKey = "";
     try {
-      let rawRes: AttackResponse;
-
-      if (config.environment === "federated") {
-        addLog({
-          text: `Simulação Federada: ${config.flClients} clientes, ${config.flRounds} rodadas`,
-          type: "info",
-        });
-        rawRes = await runFederated(config, controller.signal);
-      } else {
-        rawRes = await runAttack(config, controller.signal);
-      }
+      const rawRes = await runExperimentStream(config, (event) => {
+        if (controller.signal.aborted) return;
+        setTelemetry(event);
+        setProgress(event.total && event.current != null
+          ? Math.round(event.current / event.total * 100) : 0);
+        const key = `${event.phase}:${event.text}`;
+        const shouldLog = key !== lastLogKey || (event.current != null && event.total != null
+          && (event.current === event.total || event.current % 10 === 0));
+        if (shouldLog) {
+          lastLogKey = key;
+          const count = event.total && event.current != null ? ` (${event.current}/${event.total})` : "";
+          const loss = event.loss != null ? ` · loss ${event.loss.toExponential(3)}` : "";
+          addLog({ text: `${event.text}${count}${loss}`, type: "info" });
+        }
+      }, controller.signal);
 
       if (!controller.signal.aborted) handleResponse(sanitizeResponse(rawRes));
     } catch (err: unknown) {
       if (controller.signal.aborted) return;
-      if (logSimRef.current) clearInterval(logSimRef.current);
-      if (progressRef.current) clearInterval(progressRef.current);
       setProgress(0);
 
       if (err instanceof Error && err.name === "AbortError") {
@@ -313,8 +263,6 @@ export function Dashboard() {
   /** Aborta o ataque em andamento */
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();
-    if (logSimRef.current) clearInterval(logSimRef.current);
-    if (progressRef.current) clearInterval(progressRef.current);
     setRunState("idle");
     setProgress(0);
     addLog({
@@ -438,17 +386,17 @@ export function Dashboard() {
             className="connection"
             title={
               health === "offline"
-                ? "Inicie o backend FastAPI na porta 8000 para executar experimentos."
-                : "Conexão com o backend"
+                ? "O servidor que faz os cálculos precisa estar disponível para iniciar um experimento."
+                : `Servidor de cálculo conectado. Dispositivo padrão: ${device || "a confirmar"}. Você pode escolher outro no experimento.`
             }
           >
             <span className={`status-dot ${health}`} />
             <span>
               {health === "online"
-                ? `API conectada${device ? ` · ${device.toUpperCase()}` : ""}`
+                ? isShowcase ? "Showcase online" : "Servidor conectado"
                 : health === "checking"
-                  ? "Conectando à API"
-                  : "API desconectada"}
+                  ? "Conectando ao servidor"
+                  : "Servidor desconectado"}
             </span>
           </div>
         </header>
@@ -459,21 +407,21 @@ export function Dashboard() {
                 <div>
                   <h1>
                     {activeTab === "setup"
-                      ? "Configure o experimento"
+                      ? isShowcase ? "Experimente uma reconstrução" : "Prepare seu experimento"
                       : activeTab === "execute"
                         ? "Acompanhe a execução"
                         : activeTab === "results"
                           ? "O que foi reconstruído?"
-                          : "Leia os resultados"}
+                          : "O que os números ajudam a enxergar?"}
                   </h1>
                   <p>
                     {activeTab === "setup"
-                      ? "Uma hipótese por vez. Ajuste o cenário e observe o que muda."
+                      ? isShowcase ? "Escolha um exemplo preparado e acompanhe o que o algoritmo consegue recuperar." : "Comece com a configuração pronta. Depois, mude uma escolha por vez e veja como ela afeta a reconstrução."
                       : activeTab === "execute"
-                        ? "Da requisição ao resultado da otimização."
+                        ? "Veja o que o laboratório está fazendo e quantos ciclos de ajuste já foram concluídos."
                         : activeTab === "results"
-                          ? "Compare os dados originais com o que os gradientes revelaram."
-                          : "Convergência da otimização e impacto das defesas."}
+                          ? "Observe cores, formas e detalhes: o que a tentativa conseguiu recuperar da imagem original?"
+                          : "Use os gráficos para acompanhar a busca e comparar o efeito das defesas."}
                   </p>
                 </div>
                 {activeTab === "setup" && (
@@ -482,7 +430,7 @@ export function Dashboard() {
                     disabled={runState === "running"}
                     onClick={() =>
                       setConfig({
-                        ...DEFAULT_CONFIG,
+                        ...(isShowcase ? showcaseConfig() : DEFAULT_CONFIG),
                         defenseParams: { ...DEFAULT_CONFIG.defenseParams },
                       })
                     }
@@ -506,6 +454,7 @@ export function Dashboard() {
             )}
             {activeTab === "overview" && (
               <LearningPanel
+                isShowcase={isShowcase}
                 onExperiment={() => navigate("setup")}
                 onCode={() => navigate("code")}
               />
@@ -524,7 +473,9 @@ export function Dashboard() {
                       </legend>
                       <SetupPanel
                         config={config}
-                        onChange={setConfig}
+                        isShowcase={isShowcase}
+                        onStart={handleStart}
+                        onChange={next => setConfig(isShowcase ? showcaseConfig(next) : next)}
                         isRunning={runState === "running"}
                       />
                     </fieldset>
@@ -533,6 +484,10 @@ export function Dashboard() {
                 <aside className="experiment-summary">
                   <h2>Seu experimento</h2>
                   <dl>
+                    {isShowcase && <div>
+                      <dt>{config.batchSize === 1 ? "Exemplo" : "Exemplos"}</dt>
+                      <dd>{config.imageIndices?.map(id => SHOWCASE_SAMPLES.find(sample => sample.id === id)?.name).join(" e ")}</dd>
+                    </div>}
                     <div>
                       <dt>Ambiente</dt>
                       <dd>
@@ -542,7 +497,7 @@ export function Dashboard() {
                       </dd>
                     </div>
                     <div>
-                      <dt>Batch</dt>
+                      <dt>Imagens por vez</dt>
                       <dd>
                         {config.batchSize}{" "}
                         {config.batchSize === 1 ? "imagem" : "imagens"}
@@ -553,12 +508,16 @@ export function Dashboard() {
                       <dd>{config.numIters.toLocaleString("pt-BR")}</dd>
                     </div>
                     <div>
-                      <dt>Seed</dt>
+                      <dt>Início aleatório</dt>
                       <dd>{config.seed}</dd>
                     </div>
                     <div>
                       <dt>Defesa</dt>
                       <dd>{defenseLabels[config.defense]}</dd>
+                    </div>
+                    <div>
+                      <dt>Processamento</dt>
+                      <dd>{config.device === "cuda" ? "GPU NVIDIA" : config.device === "cpu" ? "CPU" : "Automático"}</dd>
                     </div>
                   </dl>
                   {config.environment === "federated" && (
@@ -573,18 +532,18 @@ export function Dashboard() {
                     onClick={handleStart}
                   >
                     <Play size={16} />
-                    {runState === "running" ? "Em execução" : "Executar ataque"}
+                    {runState === "running" ? "Em execução" : "Iniciar experimento"}
                   </button>
                   <p className="summary-note">
-                    O processamento usa o backend Python. A duração depende das
-                    iterações e do dispositivo.
+                    O laboratório fará os cálculos e mostrará a imagem original
+                    ao lado da reconstrução. Mais iterações podem aumentar a espera.
                   </p>
                   {health === "offline" && (
                     <div className="backend-notice">
-                      <strong>Backend indisponível</strong>
+                      <strong>O servidor de cálculo está indisponível</strong>
                       <p>
-                        Você pode explorar a teoria e configurar o cenário. Para
-                        executar, inicie a API local.
+                        Você pode continuar lendo e preparar o experimento.
+                        Para executar nesta instalação local, inicie o servidor:
                       </p>
                       <code>python -m uvicorn app:app --port 8000</code>
                     </div>
@@ -613,6 +572,7 @@ export function Dashboard() {
                     isRunning={runState === "running"}
                     logs={logs}
                     progress={progress}
+                    telemetry={telemetry}
                     onStart={handleStart}
                     onAbort={handleAbort}
                   />

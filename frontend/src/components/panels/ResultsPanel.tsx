@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { defenseLabel } from "@/lib/types";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { MetricsBadge } from "@/components/ui/MetricsBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -50,7 +51,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
         <Card>
           <CardHeader
             title="Resultados da Reconstrução"
-            subtitle="Aguarde a conclusão do ataque DLG..."
+            subtitle="A reconstrução está em andamento. Você poderá comparar as imagens quando o experimento terminar."
           />
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -78,11 +79,11 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
-                Nenhum Resultado
+                Sua primeira comparação aparece aqui
               </h3>
               <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Execute o ataque DLG para visualizar as imagens reconstruídas e
-                as métricas de qualidade (PSNR / SSIM).
+                Na aba Experimento, mantenha uma imagem e inicie o teste.
+                Ao terminar, você verá a imagem original, a reconstrução e as diferenças entre elas.
               </p>
             </div>
           </div>
@@ -121,9 +122,257 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
 
   return (
     <div className="space-y-5 animate-slide-up">
+      {/* Galeria de Reconstrução com Slider de Iteração */}
+      <Card>
+        <CardHeader
+          title="Olhe o original e a reconstrução"
+          subtitle={
+            hasImages
+              ? "Selecione uma imagem para ampliar. Use o controle abaixo para ver momentos anteriores da busca."
+              : "Inicie um experimento para ver a tentativa de reconstrução"
+          }
+          action={
+            hasSnapshots ? (
+              <SlidersHorizontal className="h-4 w-4 text-emerald-400" />
+            ) : undefined
+          }
+        />
+
+        {/* ── SLIDER DE ITERAÇÃO ── */}
+        {hasSnapshots && (
+          <div className="mb-5 rounded-xl border border-graphite-800/60 bg-graphite-900/40 px-5 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-graphite-300 flex items-center gap-1.5">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400" />
+                Progresso da Reconstrução
+              </p>
+              <span className="text-xs tabular-nums font-semibold text-emerald-400">
+                {displayLabel}
+              </span>
+            </div>
+            <input
+              aria-label="Iteração da reconstrução"
+              type="range"
+              min={-1}
+              max={response.snapshotIterations.length - 1}
+              value={iterSliderIndex}
+              onChange={(e) => setIterSliderIndex(Number(e.target.value))}
+              className="w-full h-2 rounded-lg appearance-none cursor-pointer
+                bg-graphite-800
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5
+                [&::-webkit-slider-thumb]:rounded-full
+                [&::-webkit-slider-thumb]:bg-emerald-500
+                [&::-webkit-slider-thumb]:
+                [&::-webkit-slider-thumb]:cursor-pointer
+                [&::-webkit-slider-thumb]:transition-colors
+                [&::-webkit-slider-thumb]:hover:scale-110"
+            />
+            <div className="flex justify-between mt-1.5">
+              <span
+                className={`text-[10px] cursor-pointer transition-colors ${
+                  iterSliderIndex === -1
+                    ? "text-emerald-400 font-semibold"
+                    : "text-graphite-500 hover:text-graphite-400"
+                }`}
+                onClick={() => setIterSliderIndex(-1)}
+              >
+                Final
+              </span>
+              {response.snapshotIterations.map((iter, i) => (
+                <span
+                  key={i}
+                  className={`text-[10px] cursor-pointer transition-colors ${
+                    iterSliderIndex === i
+                      ? "text-emerald-400 font-semibold"
+                      : "text-graphite-500 hover:text-graphite-400"
+                  }`}
+                  onClick={() => setIterSliderIndex(i)}
+                >
+                  {iter}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── GRID DE IMAGENS (AMPLIADO) ── */}
+        {hasImages ? (
+          <div className="space-y-8">
+            {Array.from({ length: response.batchSize }).map((_, i) => {
+              const gtImg = response.groundTruthImages[i];
+              const errImg = response.errorImages[i];
+              const predLabel = response.reconstructedLabels?.[i] ?? null;
+
+              // Monta listas para o lightbox (3 imagens por item)
+              const lbImages = [gtImg, displayImages[i] ?? "", errImg];
+              const lbLabels = [
+                `Imagem original #${i + 1}`,
+                `Reconstrução #${i + 1} — ${displayLabel}`,
+                `Diferenças entre as imagens #${i + 1}`,
+              ];
+
+              return (
+                <div
+                  key={i}
+                  className="overflow-hidden rounded-xl border border-graphite-800/60 bg-graphite-900/40"
+                >
+                  <div className="px-5 py-3 border-b border-graphite-800/40 flex items-center justify-between">
+                    <p className="text-base font-semibold text-graphite-200">
+                      Imagem #{i + 1}
+                      {predLabel !== null && (
+                        <span className="ml-2 text-xs font-normal text-graphite-500">
+                          Categoria estimada (código): {predLabel}
+                        </span>
+                      )}
+                    </p>
+                    <span className="text-[10px] text-graphite-600">
+                      Clique para ampliar
+                    </span>
+                  </div>
+                  {/* Layout ampliado: 3 colunas com imagens GRANDES */}
+                  <div className="grid grid-cols-1 gap-1 bg-graphite-800/40 p-1 sm:grid-cols-3">
+                    {/* Ground Truth */}
+                    <button
+                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
+                      onClick={() => openZoom(lbImages, lbLabels, 0)}
+                    >
+                      <p className="mb-3 text-center text-xs font-semibold  text-graphite-400">
+                        Original
+                      </p>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: "100%", maxWidth: 224, aspectRatio: "1 / 1" }}
+                      >
+                        <img
+                          src={`data:image/png;base64,${gtImg}`}
+                          alt={`Imagem original ${i + 1}`}
+                          className="rounded-lg"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            imageRendering: "pixelated",
+                            objectFit: "contain",
+                          }}
+                        />
+                        <div
+                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.5)" }}
+                        >
+                          <span className="flex items-center gap-1.5 rounded-lg bg-black/80 px-3 py-2 text-sm font-medium text-white">
+                            <ZoomIn className="h-4 w-4" />
+                            Ampliar
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Reconstrução */}
+                    <button
+                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
+                      onClick={() => openZoom(lbImages, lbLabels, 1)}
+                    >
+                      <p className="mb-3 text-center text-xs font-semibold  text-emerald-400">
+                        Reconstrução
+                      </p>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: "100%", maxWidth: 224, aspectRatio: "1 / 1" }}
+                      >
+                        <img
+                          src={`data:image/png;base64,${displayImages[i] ?? ""}`}
+                          alt={`Reconstrução ${i + 1}`}
+                          className="rounded-lg"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            imageRendering: "pixelated",
+                            objectFit: "contain",
+                          }}
+                        />
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.4)" }}
+                        >
+                          {response.perImageMetrics &&
+                            response.perImageMetrics[i] &&
+                            iterSliderIndex === -1 && (
+                              <span className="rounded bg-emerald-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-emerald-400/30">
+                                SSIM:{" "}
+                                {response.perImageMetrics[i].ssim.toFixed(4)}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Erro Absoluto */}
+                    <button
+                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
+                      onClick={() => openZoom(lbImages, lbLabels, 2)}
+                    >
+                      <p className="mb-3 text-center text-xs font-semibold  text-red-400">
+                        Diferenças
+                      </p>
+                      <div
+                        className="relative mx-auto flex items-center justify-center"
+                        style={{ width: "100%", maxWidth: 224, aspectRatio: "1 / 1" }}
+                      >
+                        <img
+                          src={`data:image/png;base64,${errImg}`}
+                          alt={`Erro absoluto ${i + 1}`}
+                          className="rounded-lg"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            imageRendering: "pixelated",
+                            objectFit: "contain",
+                          }}
+                        />
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          style={{ background: "rgba(0,0,0,0.4)" }}
+                        >
+                          {response.perImageMetrics &&
+                            response.perImageMetrics[i] &&
+                            iterSliderIndex === -1 && (
+                              <span className="rounded bg-red-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-red-400/30">
+                                MSE:{" "}
+                                {response.perImageMetrics[i].mse.toFixed(4)}
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {Array.from({ length: response.batchSize }).map((_, i) => (
+              <div
+                key={i}
+                className="relative overflow-hidden rounded-xl border border-graphite-800/60 bg-graphite-900/60 p-1"
+              >
+                <div className="aspect-square flex items-center justify-center bg-graphite-950/50 rounded-lg">
+                  <div className="text-center">
+                    <RefreshCw className="mx-auto h-6 w-6 text-graphite-600" />
+                    <p className="mt-2 text-xs text-graphite-500">
+                      Rec #{i + 1}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Sumário */}
       <Card variant={response.success ? "highlight" : "default"}>
-        <CardHeader title="Sumário do Ataque" subtitle={response.message} />
+        <CardHeader title="Um retrato desta tentativa" subtitle="Use estes números para apoiar o que você observou nas imagens." />
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryItem
             label="Dispositivo"
@@ -131,11 +380,11 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             icon={<Cpu className="h-3.5 w-3.5 text-graphite-500" />}
           />
           <SummaryItem
-            label="Batch Size"
-            value={`${response.batchSize} imagens`}
+            label="Imagens por vez"
+            value={`${response.batchSize} ${response.batchSize === 1 ? "imagem" : "imagens"}`}
           />
           <SummaryItem
-            label="Loss Final"
+            label="Erro da busca (loss)"
             value={
               response.lossHistory.length > 0
                 ? fmt(response.lossHistory[response.lossHistory.length - 1], 6)
@@ -143,6 +392,14 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             }
           />
         </div>
+        <details className="mt-4 text-sm text-graphite-400">
+          <summary>Como esta execução foi feita</summary>
+          <p className="mt-2">{response.message}</p>
+          <p className="mt-2">
+            A loss mede a diferença usada para orientar os ajustes do ataque.
+            Um valor menor não garante, sozinho, uma imagem visualmente mais parecida.
+          </p>
+        </details>
 
         {response.metrics && (
           <div className="mt-5 flex flex-wrap items-center gap-4">
@@ -158,7 +415,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             {defenseType && defenseType !== "none" && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-amber-600/10 px-2.5 py-1 text-xs font-medium text-amber-400 border border-amber-500/20">
                 <Shield className="h-3 w-3" />
-                {defenseType}
+                {defenseLabel(defenseType)}
                 {!informed && " (desinformado)"}
               </span>
             )}
@@ -173,15 +430,19 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             title={
               <span className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-blue-400" />
-                Acurácia do Modelo LeNet
+                Como o modelo reconhece as imagens
               </span>
             }
             subtitle={`CIFAR-100 · ${response.accuracyMetrics!.numTestSamples} amostras de teste`}
           />
+          <p className="mb-4 text-sm text-graphite-400">
+            A acurácia conta quantas categorias o modelo acertou no conjunto de teste.
+            Já a semelhança entre o original e a reconstrução é avaliada por medidas como SSIM e PSNR.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
               <p className="text-[10px] font-medium  text-graphite-500">
-                Acurácia Top-1 / Top-5
+                Acertos na 1ª / entre as 5 opções
               </p>
               <p className="mt-1 tabular-nums text-2xl font-bold text-blue-400">
                 {response.accuracyMetrics!.testAccuracy}% /{" "}
@@ -190,7 +451,7 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
             </div>
             <div className="rounded-lg border border-graphite-800/40 bg-graphite-900/30 px-4 py-3">
               <p className="text-[10px] font-medium  text-graphite-500">
-                Loss Média (Teste)
+                Erro médio na classificação
               </p>
               <p className="mt-1 tabular-nums text-2xl font-bold text-graphite-300">
                 {fmt(response.accuracyMetrics!.testLoss, 4)}
@@ -277,254 +538,6 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
           <PenaltyInterpretation penalty={response.defensePenalty!} />
         </Card>
       )}
-
-      {/* Galeria de Reconstrução com Slider de Iteração */}
-      <Card>
-        <CardHeader
-          title="Galeria de Reconstrução"
-          subtitle={
-            hasImages
-              ? "Clique em qualquer imagem para ampliar · Navegue entre iterações com o slider"
-              : "Execute o ataque para visualizar as imagens reconstruídas"
-          }
-          action={
-            hasSnapshots ? (
-              <SlidersHorizontal className="h-4 w-4 text-emerald-400" />
-            ) : undefined
-          }
-        />
-
-        {/* ── SLIDER DE ITERAÇÃO ── */}
-        {hasSnapshots && (
-          <div className="mb-5 rounded-xl border border-graphite-800/60 bg-graphite-900/40 px-5 py-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-medium text-graphite-300 flex items-center gap-1.5">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400" />
-                Progresso da Reconstrução
-              </p>
-              <span className="text-xs tabular-nums font-semibold text-emerald-400">
-                {displayLabel}
-              </span>
-            </div>
-            <input
-              aria-label="Iteração da reconstrução"
-              type="range"
-              min={-1}
-              max={response.snapshotIterations.length - 1}
-              value={iterSliderIndex}
-              onChange={(e) => setIterSliderIndex(Number(e.target.value))}
-              className="w-full h-2 rounded-lg appearance-none cursor-pointer
-                bg-graphite-800
-                [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5
-                [&::-webkit-slider-thumb]:rounded-full
-                [&::-webkit-slider-thumb]:bg-emerald-500
-                [&::-webkit-slider-thumb]:
-                [&::-webkit-slider-thumb]:cursor-pointer
-                [&::-webkit-slider-thumb]:transition-colors
-                [&::-webkit-slider-thumb]:hover:scale-110"
-            />
-            <div className="flex justify-between mt-1.5">
-              <span
-                className={`text-[10px] cursor-pointer transition-colors ${
-                  iterSliderIndex === -1
-                    ? "text-emerald-400 font-semibold"
-                    : "text-graphite-500 hover:text-graphite-400"
-                }`}
-                onClick={() => setIterSliderIndex(-1)}
-              >
-                Final
-              </span>
-              {response.snapshotIterations.map((iter, i) => (
-                <span
-                  key={i}
-                  className={`text-[10px] cursor-pointer transition-colors ${
-                    iterSliderIndex === i
-                      ? "text-emerald-400 font-semibold"
-                      : "text-graphite-500 hover:text-graphite-400"
-                  }`}
-                  onClick={() => setIterSliderIndex(i)}
-                >
-                  {iter}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── GRID DE IMAGENS (AMPLIADO) ── */}
-        {hasImages ? (
-          <div className="space-y-8">
-            {Array.from({ length: response.batchSize }).map((_, i) => {
-              const gtImg = response.groundTruthImages[i];
-              const errImg = response.errorImages[i];
-              const predLabel = response.reconstructedLabels?.[i] ?? null;
-
-              // Monta listas para o lightbox (3 imagens por item)
-              const lbImages = [gtImg, displayImages[i] ?? "", errImg];
-              const lbLabels = [
-                `Ground Truth #${i + 1}`,
-                `Reconstrução #${i + 1} — ${displayLabel}`,
-                `Erro Absoluto #${i + 1}`,
-              ];
-
-              return (
-                <div
-                  key={i}
-                  className="overflow-hidden rounded-xl border border-graphite-800/60 bg-graphite-900/40"
-                >
-                  <div className="px-5 py-3 border-b border-graphite-800/40 flex items-center justify-between">
-                    <p className="text-base font-semibold text-graphite-200">
-                      Imagem #{i + 1}
-                      {predLabel !== null && (
-                        <span className="ml-2 text-xs font-normal text-graphite-500">
-                          Label predito: {predLabel}
-                        </span>
-                      )}
-                    </p>
-                    <span className="text-[10px] text-graphite-600">
-                      Clique para ampliar
-                    </span>
-                  </div>
-                  {/* Layout ampliado: 3 colunas com imagens GRANDES */}
-                  <div className="grid grid-cols-3 gap-1 bg-graphite-800/40 p-1">
-                    {/* Ground Truth */}
-                    <button
-                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
-                      onClick={() => openZoom(lbImages, lbLabels, 0)}
-                    >
-                      <p className="mb-3 text-center text-xs font-semibold  text-graphite-400">
-                        Ground Truth
-                      </p>
-                      <div
-                        className="relative mx-auto flex items-center justify-center"
-                        style={{ width: 224, height: 224 }}
-                      >
-                        <img
-                          src={`data:image/png;base64,${gtImg}`}
-                          alt={`Ground Truth ${i + 1}`}
-                          className="rounded-lg"
-                          style={{
-                            width: 224,
-                            height: 224,
-                            imageRendering: "pixelated",
-                            objectFit: "contain",
-                          }}
-                        />
-                        <div
-                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
-                          style={{ background: "rgba(0,0,0,0.5)" }}
-                        >
-                          <span className="flex items-center gap-1.5 rounded-lg bg-black/80 px-3 py-2 text-sm font-medium text-white">
-                            <ZoomIn className="h-4 w-4" />
-                            Ampliar
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Reconstrução */}
-                    <button
-                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
-                      onClick={() => openZoom(lbImages, lbLabels, 1)}
-                    >
-                      <p className="mb-3 text-center text-xs font-semibold  text-emerald-400">
-                        Reconstrução
-                      </p>
-                      <div
-                        className="relative mx-auto flex items-center justify-center"
-                        style={{ width: 224, height: 224 }}
-                      >
-                        <img
-                          src={`data:image/png;base64,${displayImages[i] ?? ""}`}
-                          alt={`Reconstrução ${i + 1}`}
-                          className="rounded-lg"
-                          style={{
-                            width: 224,
-                            height: 224,
-                            imageRendering: "pixelated",
-                            objectFit: "contain",
-                          }}
-                        />
-                        <div
-                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
-                          style={{ background: "rgba(0,0,0,0.4)" }}
-                        >
-                          {response.perImageMetrics &&
-                            response.perImageMetrics[i] &&
-                            iterSliderIndex === -1 && (
-                              <span className="rounded bg-emerald-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-emerald-400/30">
-                                SSIM:{" "}
-                                {response.perImageMetrics[i].ssim.toFixed(4)}
-                              </span>
-                            )}
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Erro Absoluto */}
-                    <button
-                      className="bg-graphite-950/60 p-4 text-left transition-colors hover:bg-graphite-900/60 group rounded-lg"
-                      onClick={() => openZoom(lbImages, lbLabels, 2)}
-                    >
-                      <p className="mb-3 text-center text-xs font-semibold  text-red-400">
-                        Erro Absoluto
-                      </p>
-                      <div
-                        className="relative mx-auto flex items-center justify-center"
-                        style={{ width: 224, height: 224 }}
-                      >
-                        <img
-                          src={`data:image/png;base64,${errImg}`}
-                          alt={`Erro absoluto ${i + 1}`}
-                          className="rounded-lg"
-                          style={{
-                            width: 224,
-                            height: 224,
-                            imageRendering: "pixelated",
-                            objectFit: "contain",
-                          }}
-                        />
-                        <div
-                          className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
-                          style={{ background: "rgba(0,0,0,0.4)" }}
-                        >
-                          {response.perImageMetrics &&
-                            response.perImageMetrics[i] &&
-                            iterSliderIndex === -1 && (
-                              <span className="rounded bg-red-500/90 px-3 py-1.5 text-sm font-bold text-white  border border-red-400/30">
-                                MSE:{" "}
-                                {response.perImageMetrics[i].mse.toFixed(4)}
-                              </span>
-                            )}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: response.batchSize }).map((_, i) => (
-              <div
-                key={i}
-                className="relative overflow-hidden rounded-xl border border-graphite-800/60 bg-graphite-900/60 p-1"
-              >
-                <div className="aspect-square flex items-center justify-center bg-graphite-950/50 rounded-lg">
-                  <div className="text-center">
-                    <RefreshCw className="mx-auto h-6 w-6 text-graphite-600" />
-                    <p className="mt-2 text-xs text-graphite-500">
-                      Rec #{i + 1}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
 
       {/* ── LIGHTBOX (Zoom) ── */}
       {lightboxOpen && (
@@ -618,17 +631,17 @@ function PenaltyInterpretation({
 
   if (penalty.deltaSsim < -0.1) {
     interpretation =
-      "A defesa causa degradação SIGNIFICATIVA na reconstrução — forte proteção de privacidade.";
+      "A reconstrução perdeu bastante semelhança estrutural com a defesa nesta tentativa. Isso mostra um efeito neste cenário, não uma garantia de privacidade.";
     color = "text-emerald-400";
     Icon = Shield;
   } else if (penalty.deltaSsim < -0.03) {
     interpretation =
-      "A defesa causa degradação MODERADA na reconstrução — proteção parcial.";
+      "A defesa reduziu parte da semelhança estrutural nesta tentativa. Compare as imagens para ver quais detalhes ainda foram recuperados.";
     color = "text-amber-400";
     Icon = AlertTriangle;
   } else {
     interpretation =
-      "A defesa tem impacto MÍNIMO na reconstrução — proteção fraca ou inconclusiva.";
+      "Esta comparação não mostrou uma grande redução na semelhança estrutural. Observe as imagens e experimente outra intensidade da defesa.";
     color = "text-red-400";
     Icon = AlertTriangle;
   }

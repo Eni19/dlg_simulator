@@ -1,21 +1,37 @@
 {
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "fastapi",
+      "entrypoint": "app:app",
+      "functions": {
+        "app.py": {
+          "maxDuration": 300,
+          "excludeFiles": "{frontend/**,gateway/**,tests/**,.dist/**,src/federated_flower.py,src/scenarios.py,**/*.ipynb}"
+        }
+      }
     },
-    {
-      "src": "/(.*)",
-      "dest": "api/index.py"
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite",
+      "buildCommand": "npm run build:showcase",
+      "outputDirectory": "dist"
+    },
+    "gateway": {
+      "root": "gateway",
+      "framework": "express",
+      "entrypoint": "index.js",
+      "bindings": [
+        { "type": "service", "service": "app", "format": "url", "env": "APP_URL" }
+      ],
+      "functions": {
+        "index.js": { "maxDuration": 300 }
+      }
     }
-  ],
-  "env": {
-    "PYTHONPATH": "."
-  }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "gateway" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
 }

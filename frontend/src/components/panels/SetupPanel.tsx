@@ -208,7 +208,7 @@ export function SetupPanel({ config, onChange, isRunning, isShowcase = false, on
                 }`}
               >
                 <Server className="h-5 w-5" />
-                <span className="text-xs font-medium">O servidor</span>
+                <span className="text-sm font-medium">O servidor</span>
               </button>
               <button
                 onClick={() => patch({ attackerRole: "malicious_client" })}
@@ -219,7 +219,7 @@ export function SetupPanel({ config, onChange, isRunning, isShowcase = false, on
                 }`}
               >
                 <UserX className="h-5 w-5" />
-                <span className="text-xs font-medium">Outro participante</span>
+                <span className="text-sm font-medium">Outro participante</span>
               </button>
               <button
                 onClick={() => patch({ attackerRole: "mitm" })}
@@ -230,11 +230,11 @@ export function SetupPanel({ config, onChange, isRunning, isShowcase = false, on
                 }`}
               >
                 <Wifi className="h-5 w-5" />
-                <span className="text-xs font-medium">Alguém na rede</span>
+                <span className="text-sm font-medium">Alguém na rede</span>
               </button>
             </div>
 
-            <p className="mt-3 text-xs text-graphite-400">
+            <p className="mt-3 text-sm text-graphite-400">
               {config.attackerRole === "malicious_server" &&
                 "O coordenador do aprendizado observa as pistas enviadas por cada participante antes de combiná-las."}
               {config.attackerRole === "malicious_client" &&
@@ -260,34 +260,21 @@ export function SetupPanel({ config, onChange, isRunning, isShowcase = false, on
         <CardHeader
           title={
             <span className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-amber-400" />
+              <Shield className="h-5 w-5 text-emerald-500" />
               Defesas
             </span>
           }
           subtitle="Primeiro, experimente sem defesa. Depois, escolha uma forma de dificultar a reconstrução e compare o resultado."
         />
 
-        {/* Toggle de defesa ativa */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {defenseOptions.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() =>
-                patch({
-                  defense: opt.value,
-                })
-              }
-              disabled={isRunning}
-              className={`rounded-lg px-3.5 py-2 text-xs font-medium transition-colors duration-200 ${
-                config.defense === opt.value
-                  ? "bg-amber-600/20 text-amber-400 border border-amber-500/30"
-                  : "bg-graphite-800/60 text-graphite-400 border border-transparent hover:border-graphite-700"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        {/* Escolha da defesa */}
+        <Toggle
+          className="mb-4"
+          options={defenseOptions}
+          value={config.defense}
+          onChange={(defense) => patch({ defense })}
+          label="Defesa"
+        />
 
         <p className="text-sm text-graphite-400">
           {config.defense === "none" && "As pistas chegam ao ataque sem uma defesa adicional. Use esse resultado como referência."}

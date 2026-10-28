@@ -7,7 +7,6 @@ import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import type { AttackResponse } from "@/lib/types";
 import { fmt } from "@/lib/utils";
 import {
-  Image as ImageIcon,
   RefreshCw,
   Shield,
   TrendingDown,
@@ -72,22 +71,23 @@ export function ResultsPanel({ response, isLoading }: ResultsPanelProps) {
   if (!response) {
     return (
       <div className="space-y-5 animate-slide-up">
-        <Card>
-          <div className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="rounded-full bg-graphite-800 p-4">
-              <ImageIcon className="h-8 w-8 text-graphite-500" />
+        <div className="empty-sheet">
+          <div className="empty-frames" aria-hidden="true">
+            <div className="photo empty-frame">
+              <span className="empty-slot" />
+              <span className="photo-label">original</span>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">
-                Sua primeira comparação aparece aqui
-              </h3>
-              <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Na aba Experimento, mantenha uma imagem e inicie o teste.
-                Ao terminar, você verá a imagem original, a reconstrução e as diferenças entre elas.
-              </p>
+            <div className="photo empty-frame">
+              <span className="empty-slot" />
+              <span className="photo-label">reconstrução</span>
             </div>
           </div>
-        </Card>
+          <h3>Sua primeira comparação aparece aqui</h3>
+          <p>
+            Na aba Experimento, mantenha uma imagem e inicie o teste.
+            Ao terminar, você verá a imagem original, a reconstrução e as diferenças entre elas.
+          </p>
+        </div>
       </div>
     );
   }

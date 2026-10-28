@@ -30,7 +30,7 @@ export function Button({
   };
 
   const variants = {
-    primary: "bg-[#172b36] hover:bg-[#294553] text-white",
+    primary: "bg-[#1f2a30] hover:bg-[#134b51] text-white",
     secondary:
       "bg-graphite-800 hover:bg-graphite-700 text-graphite-200 border border-graphite-700/50",
     outline:
@@ -46,7 +46,7 @@ export function Button({
       data-variant={variant}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center rounded-md font-medium transition-colors duration-150 lab-button",
+        "inline-flex items-center justify-center rounded-full font-semibold lab-button",
         "focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2 focus:ring-offset-graphite-950",
         "disabled:cursor-not-allowed disabled:opacity-50",
         sizes[size],

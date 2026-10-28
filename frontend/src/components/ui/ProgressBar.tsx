@@ -25,8 +25,8 @@ export function ProgressBar({
 
   const fills: Record<string, string> = {
     emerald: "bg-emerald-500",
-    amber: "bg-[#a86f0c]",
-    blue: "bg-[#2f70bb]",
+    amber: "bg-[#c08a2b]",
+    blue: "bg-[#2b59a6]",
   };
 
   return (
@@ -58,9 +58,6 @@ export function ProgressBar({
           )}
           style={{ width: `${clamped}%` }}
         >
-          {animated && (
-            <div className="absolute inset-0 animate-pulse bg-white/10" />
-          )}
         </div>
       </div>
     </div>

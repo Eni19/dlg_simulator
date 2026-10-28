@@ -156,23 +156,23 @@ export function DataDistributionPanel({
                 >
                   <XAxis
                     dataKey="name"
-                    stroke="#525252"
+                    stroke="#57625f"
                     fontSize={12}
                     tickMargin={10}
                   />
-                  <YAxis stroke="#525252" fontSize={12} />
+                  <YAxis stroke="#57625f" fontSize={12} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#171717",
-                      border: "1px solid #262626",
-                      borderRadius: "8px",
-                      color: "#d4d4d4",
+                      backgroundColor: "#fffdf9",
+                      border: "1px solid #e6dccb",
+                      borderRadius: "12px",
+                      color: "#1f2a30",
                     }}
                     itemStyle={{ fontSize: "12px" }}
                     labelStyle={{
                       fontWeight: "bold",
                       marginBottom: "8px",
-                      color: "#fff",
+                      color: "#1f2a30",
                     }}
                     // Limita a exibição do tooltip para não estourar a tela com 100 classes
                     formatter={(value: number, name: string) => [

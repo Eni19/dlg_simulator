@@ -27,6 +27,7 @@ import {
   ChartNoAxesCombined,
   Code2,
   Github,
+  Linkedin,
   Menu,
   X,
   RotateCcw,
@@ -52,6 +53,7 @@ const CodePanel = lazy(() =>
 type ActiveTab =
   "overview" | "setup" | "execute" | "results" | "charts" | "code";
 type RunState = "idle" | "running" | "success" | "error";
+const LINKEDIN_URL = "https://www.linkedin.com/in/enrique-susin-3a4a36234/";
 const TABS = [
   { key: "overview" as const, label: "Comece por aqui", icon: BookOpen },
   { key: "setup" as const, label: "Experimento", icon: SlidersHorizontal },
@@ -295,20 +297,16 @@ export function Dashboard() {
             navigate("overview");
           }}
         >
-          <svg viewBox="0 0 36 36" width="32" height="32" aria-hidden="true">
-            <path
-              d="M4 9h9v9H4zm19 0h9v9h-9zM13 23h10v9H13z"
-              fill="currentColor"
-            />
-            <path
-              d="m13 14 10 0M9 18l9 10 9-10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            />
+          {/* Uma imagem de 3 × 3 pixels que vai ganhando nitidez. */}
+          <svg className="brand-mark" viewBox="0 0 30 30" width="30" height="30" aria-hidden="true">
+            {[0.25, 0.5, 1, 0.5, 1, 0.75, 1, 0.75, 0.35].map((opacity, i) => (
+              <rect key={i} x={(i % 3) * 10} y={Math.floor(i / 3) * 10}
+                width="8.5" height="8.5" rx="2.2" fill="currentColor" opacity={opacity} />
+            ))}
           </svg>
           <span>
-            DLG<span className="brand-light"> / lab</span>
+            <span className="brand-name">DLG</span>
+            <span className="brand-light">lab</span>
           </span>
         </a>
         <button
@@ -357,7 +355,22 @@ export function Dashboard() {
           >
             <Github size={16} /> Repositório <ArrowUpRight size={14} />
           </a>
-          <span className="author-note">Projeto de Enrique Susin</span>
+          <a
+            href={LINKEDIN_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Linkedin size={16} /> LinkedIn <ArrowUpRight size={14} />
+          </a>
+          <a
+            className="author-note"
+            href={LINKEDIN_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Projeto de Enrique Susin, perfil no LinkedIn"
+          >
+            Projeto de Enrique Susin
+          </a>
         </div>
       </aside>
       {menuOpen && (
@@ -402,6 +415,7 @@ export function Dashboard() {
         </header>
         <main id="main-content" className="lab-sheet" tabIndex={-1}>
           <Suspense fallback={<p role="status">Carregando o laboratório…</p>}>
+            <div key={activeTab} className="tab-view">
             {activeTab !== "overview" && activeTab !== "code" && (
               <div className="workspace-heading">
                 <div>
@@ -627,14 +641,20 @@ export function Dashboard() {
               <span>
                 DLG / lab <span>Aprender observando.</span>
               </span>
-              <a
-                href="https://github.com/Eni19/dlg_simulator"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Explore a implementação <ArrowUpRight size={14} />
-              </a>
+              <nav className="footer-links" aria-label="Links do autor">
+                <a href={LINKEDIN_URL} target="_blank" rel="noreferrer">
+                  Fale com Enrique no LinkedIn <ArrowUpRight size={14} />
+                </a>
+                <a
+                  href="https://github.com/Eni19/dlg_simulator"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Explore a implementação <ArrowUpRight size={14} />
+                </a>
+              </nav>
             </footer>
+            </div>
           </Suspense>
         </main>
       </div>

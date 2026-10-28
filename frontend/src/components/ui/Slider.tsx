@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 interface SliderProps {
   value: number;
@@ -46,6 +46,7 @@ export function Slider({
         aria-label={label}
         type="range"
         className="lab-range"
+        style={{ "--fill": `${max > min ? ((value - min) / (max - min)) * 100 : 0}%` } as CSSProperties}
         min={min}
         max={max}
         step={step}

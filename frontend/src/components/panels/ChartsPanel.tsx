@@ -20,7 +20,7 @@ import {
   Bar,
   Cell,
 } from "recharts";
-import { BarChart3, TrendingDown } from "lucide-react";
+import { TrendingDown } from "lucide-react";
 
 interface ChartsPanelProps {
   response: AttackResponse | null;
@@ -28,10 +28,10 @@ interface ChartsPanelProps {
 }
 
 // Cores do tema
-const EMERALD_MAIN = "#1b6c80";
-const EMERALD_MUTED = "#2f70bb";
-const GRAPHITE_GRID = "#e4e9ec";
-const GRAPHITE_TEXT = "#526570";
+const EMERALD_MAIN = "#1d6a72";
+const EMERALD_MUTED = "#2b59a6";
+const GRAPHITE_GRID = "#e3dccf";
+const GRAPHITE_TEXT = "#57625f";
 
 /**
  * Step 4 — Gráficos de Análise Avançada.
@@ -55,22 +55,18 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
   if (!response) {
     return (
       <div className="space-y-5 animate-slide-up">
-        <Card>
-          <div className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="rounded-full bg-graphite-800 p-4">
-              <BarChart3 className="h-8 w-8 text-graphite-500" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">
-                Os gráficos vão contar a história da busca
-              </h3>
-              <p className="mt-1 text-sm text-graphite-400 max-w-md">
-                Primeiro, inicie um experimento. Depois, acompanhe como o erro
-                da busca mudou e, quando houver uma comparação, o que a defesa alterou.
-              </p>
-            </div>
-          </div>
-        </Card>
+        <div className="empty-sheet">
+          <svg className="empty-axes" viewBox="0 0 320 150" aria-hidden="true">
+            <path d="M24 8 V126 H312" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M18 16 L24 8 L30 16 M304 120 L312 126 L304 132" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <text x="168" y="74" textAnchor="middle" className="hand-note" fill="var(--pen)">ainda sem dados</text>
+          </svg>
+          <h3>Os gráficos vão contar a história da busca</h3>
+          <p>
+            Primeiro, inicie um experimento. Depois, acompanhe como o erro
+            da busca mudou e, quando houver uma comparação, o que a defesa alterou.
+          </p>
+        </div>
       </div>
     );
   }
@@ -163,10 +159,10 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#ffffff",
-                  border: "1px solid #3a424e",
+                  backgroundColor: "#fffdf9",
+                  border: "1px solid #e6dccb",
                   borderRadius: "12px",
-                  color: "#172b36",
+                  color: "#1f2a30",
                   fontSize: "12px",
                 }}
                 formatter={(value: number) => [fmt(value, 6), "Loss"]}
@@ -232,10 +228,10 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#ffffff",
-                  border: "1px solid #3a424e",
+                  backgroundColor: "#fffdf9",
+                  border: "1px solid #e6dccb",
                   borderRadius: "12px",
-                  color: "#172b36",
+                  color: "#1f2a30",
                   fontSize: "12px",
                 }}
               />
@@ -252,7 +248,7 @@ export function ChartsPanel({ response, isLoading }: ChartsPanelProps) {
                 {defenseData.map((_, idx) => (
                   <Cell
                     key={idx}
-                    fill={idx === 0 ? EMERALD_MAIN : "#a86f0c"}
+                    fill={idx === 0 ? EMERALD_MAIN : "#c08a2b"}
                     fillOpacity={idx === 0 ? 1 : 0.7}
                   />
                 ))}

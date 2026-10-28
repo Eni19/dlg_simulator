@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Terminal as TerminalIcon } from "lucide-react";
 
 export interface LogLine {
   id: string;
@@ -42,81 +41,36 @@ export function Terminal({
     setVisibleLogs(logs.slice(-maxLines));
   }, [logs, maxLines]);
 
-  const lineColor = (type: LogLine["type"]) => {
-    switch (type) {
-      case "metric":
-        return "text-emerald-400";
-      case "warn":
-        return "text-amber-400";
-      case "success":
-        return "text-emerald-300";
-      case "error":
-        return "text-red-400";
-      default:
-        return "text-graphite-300";
-    }
-  };
-
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-2xl border border-graphite-800 bg-[#0a0d11] ",
-        className,
-      )}
-    >
-      {/* Header do Terminal */}
-      <div className="flex items-center justify-between border-b border-graphite-800/50 px-5 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
-            <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
-          </div>
-          <TerminalIcon className="ml-2 h-4 w-4 text-graphite-500" />
-          <span className="text-xs font-medium text-graphite-400">{title}</span>
-        </div>
+    <section className={cn("run-log", className)} aria-label={title}>
+      <header className="run-log-header">
+        <h3>{title}</h3>
         {isRunning && (
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-[11px] font-medium text-emerald-500">
-              Em curso
-            </span>
-          </div>
+          <span className="run-log-live">
+            <span className="status-dot running" />
+            Em curso
+          </span>
         )}
-      </div>
+      </header>
 
-      {/* Corpo do Terminal */}
-      <div
-        ref={scrollRef}
-        className="h-72 overflow-y-auto p-4 tabular-nums text-xs leading-relaxed"
-      >
+      <div ref={scrollRef} className="run-log-body">
         {visibleLogs.length === 0 && (
-          <div className="flex h-full items-center justify-center">
-            <p className="animate-pulse text-graphite-600">
-              As etapas aparecerão aqui quando você iniciar o experimento.
-            </p>
+          <div className="run-log-empty">
+            <span className="hand-note">nada por aqui ainda</span>
+            As etapas aparecerão aqui quando você iniciar o experimento.
           </div>
         )}
         {visibleLogs.map((line) => (
-          <div
-            key={line.id}
-            className={cn(
-              "flex gap-2 transition-opacity duration-300",
-              lineColor(line.type),
-            )}
-          >
-            <span className="select-none text-graphite-700">›</span>
+          <div key={line.id} className="run-log-line" data-type={line.type}>
+            <span>›</span>
             <span className="whitespace-pre-wrap break-words min-w-0">{line.text}</span>
           </div>
         ))}
       </div>
 
-      {/* Footer — barra de status */}
-      <div className="border-t border-graphite-800/50 px-5 py-2">
-        <p className="text-[10px] text-graphite-600">
-          {logs.length} registros · {isRunning ? "Recebendo atualizações" : logs.length ? "Acompanhamento encerrado" : "Pronto para começar"}
-        </p>
-      </div>
-    </div>
+      <footer className="run-log-footer">
+        {logs.length} registros · {isRunning ? "Recebendo atualizações" : logs.length ? "Acompanhamento encerrado" : "Pronto para começar"}
+      </footer>
+    </section>
   );
 }

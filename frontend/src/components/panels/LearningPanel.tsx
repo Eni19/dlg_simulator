@@ -35,6 +35,15 @@ const stages = [
   },
 ];
 
+/** Seta de caneta para as anotações na margem. */
+function NoteArrow({ d, width, height }: { d: string; width: number; height: number }) {
+  return (
+    <svg className="note-arrow" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
 export function LearningPanel({
   onExperiment,
   onCode,
@@ -55,7 +64,7 @@ export function LearningPanel({
           <p>
             Para aprender com uma imagem, uma inteligência artificial calcula
             como deve se ajustar. Os gradientes, números que orientam esses
-            ajustes, podem carregar pistas sobre o exemplo usado no aprendizado.
+            ajustes, <span className="marker">podem carregar pistas</span> sobre o exemplo usado no aprendizado.
             O que alguém conseguiria descobrir
             se tivesse acesso a elas?
           </p>
@@ -71,6 +80,10 @@ export function LearningPanel({
             <button className="text-action" onClick={onCode}>
               Conhecer o código <ArrowUpRight size={16} />
             </button>
+            <div className="cta-note" aria-hidden="true">
+              <NoteArrow d="M30 40 C 14 36, 8 22, 12 6 M5 13 L12 5 L19 12" width={34} height={44} />
+              <span className="hand-note">comece por aqui!</span>
+            </div>
           </div>
           <p className="intro-note">
             {isShowcase
@@ -111,17 +124,17 @@ export function LearningPanel({
             role="tabpanel" aria-labelledby={`mechanism-tab-${stage}`} tabIndex={0}>
           <figure className="mechanism-example">
             <div className="mechanism-example-images">
-              {stage === 2 && <div>
+              {stage === 2 && <div className="photo">
                 <img src={`data:image/png;base64,${demo.early}`} alt="Primeiro registro da tentativa de reconstrução do dinossauro" width={144} height={144} />
-                <span>Primeiro registro</span>
+                <span className="photo-label">Primeiro registro</span>
               </div>}
-              <div>
+              <div className="photo">
                 <img src={`data:image/png;base64,${current.image}`}
                   alt={stage === 0 ? "Imagem original de um dinossauro, do conjunto público CIFAR-100" : stage === 1
                     ? "Mapa de valores dos gradientes da primeira camada: tons de azul representam sinais diferentes"
                     : "Reconstrução do dinossauro obtida em uma execução real do laboratório"}
                   width={144} height={144} />
-                <span>{stage === 0 ? "Original · dinossauro" : stage === 1 ? "Gradientes em cores" : `Após ${demo.iterations} iterações`}</span>
+                <span className="photo-label">{stage === 0 ? "Original · dinossauro" : stage === 1 ? "Gradientes em cores" : `Após ${demo.iterations} iterações`}</span>
               </div>
             </div>
             <figcaption className="sr-only">{current.title}: exemplo real registrado no laboratório.</figcaption>
@@ -145,7 +158,12 @@ export function LearningPanel({
           </details>
         </section>
       </section>
-      <section className="research-context reading-section" aria-labelledby="research-heading">
+      <section className="research-context" aria-labelledby="research-heading">
+        <div className="research-date" aria-hidden="true">
+          <span className="research-year">2019</span>
+          <span className="hand-note">NeurIPS</span>
+        </div>
+        <div className="research-body">
         <h2 id="research-heading">De onde veio essa ideia?</h2>
         <p>
           Em 2019, <strong>Ligeng Zhu, Zhijian Liu e Song Han</strong> apresentaram
@@ -165,6 +183,7 @@ export function LearningPanel({
           target="_blank" rel="noreferrer">
           Conhecer o artigo original, em inglês <ArrowUpRight size={16} />
         </a>
+        </div>
       </section>
       <section className="explainer-section" aria-labelledby="learn-heading">
         <div className="section-heading">
@@ -222,6 +241,19 @@ export function LearningPanel({
             Ver como a busca foi programada <ArrowRight size={16} />
           </button>
         </div>
+        <div className="loss-visual">
+        <figure className="loss-strip">
+          <div className="photo">
+            <img src={`data:image/png;base64,${demo.early}`} alt="Imagem ruidosa no início da busca" width={144} height={144} />
+            <span className="photo-label">{demo.earlyIteration === 0 ? "no início" : `iteração ${demo.earlyIteration}`}</span>
+          </div>
+          <NoteArrow d="M6 26 C 22 8, 44 8, 62 22 M52 16 L62 22 L54 31" width={68} height={40} />
+          <div className="photo">
+            <img src={`data:image/png;base64,${demo.reconstruction}`} alt={`Reconstrução após ${demo.iterations} iterações`} width={144} height={144} />
+            <span className="photo-label">{demo.iterations} iterações depois</span>
+          </div>
+          <figcaption className="sr-only">Exemplo real registrado no laboratório: do ruído inicial à reconstrução.</figcaption>
+        </figure>
         <details className="formula-panel">
           <summary>Quero conhecer a matemática</summary>
           <code>L = (1 − α) L₂ + α Lcos + λ(t) TV + β Lanchor</code>
@@ -232,6 +264,7 @@ export function LearningPanel({
             α, λ(t) e β controlam o peso de cada parte.
           </p>
         </details>
+        </div>
       </section>
       <section className="reading-section" aria-labelledby="reading-heading">
         <h2 id="reading-heading">Primeiro as imagens, depois os números</h2>

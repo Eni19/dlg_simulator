@@ -5,7 +5,7 @@ import { Terminal, type LogLine } from "@/components/ui/Terminal";
 import type { AttackConfig } from "@/lib/types";
 import { defenseLabel as describeDefense } from "@/lib/types";
 import type { ExperimentProgress } from "@/lib/api";
-import { Play, Square, Shield, Zap } from "lucide-react";
+import { Play, Square } from "lucide-react";
 
 interface ExecutionPanelProps {
   config: AttackConfig;
@@ -41,10 +41,10 @@ export function ExecutionPanel({
       <Card variant="highlight">
         <div className="flex flex-col items-center gap-5 py-4 sm:flex-row sm:justify-between">
           <div className="text-center sm:text-left">
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="font-serif text-2xl font-medium text-white">
               {isRunning ? "A reconstrução está em andamento" : "Pronto para experimentar?"}
             </h3>
-            <p className="mt-1 text-sm text-graphite-400">
+            <p className="mt-1 text-[15px] text-graphite-400">
               {envLabel} · Batch {config.batchSize} · {config.numIters}{" "}
               iterações · {defenseLabel}
             </p>
@@ -96,46 +96,7 @@ export function ExecutionPanel({
         )}
       </Card>
 
-      {/* Badges de Status */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          {
-            label: "Ambiente",
-            value: envLabel,
-            icon: Zap,
-          },
-          {
-            label: "Imagens por vez",
-            value: `${config.batchSize} ${config.batchSize === 1 ? "imagem" : "imagens"}`,
-            icon: Zap,
-          },
-          {
-            label: "Iterações",
-            value: String(config.numIters),
-            icon: Zap,
-          },
-          {
-            label: "Defesa",
-            value: defenseLabel,
-            icon: Shield,
-          },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-xl border border-graphite-800/60 bg-graphite-900/40 p-4 text-center"
-          >
-            <stat.icon className="mx-auto mb-1.5 h-4 w-4 text-graphite-500" />
-            <p className="text-[10px] font-medium  text-graphite-500">
-              {stat.label}
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-white">
-              {stat.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <p className="text-sm text-graphite-400">
+      <p className="text-[15px] leading-relaxed text-graphite-400">
         Acompanhe abaixo as etapas reais da execução. Depois dos ajustes,
         o laboratório compara a reconstrução com o original e calcula as medidas de semelhança.
       </p>

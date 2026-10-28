@@ -2,31 +2,68 @@
 
 ## Direction
 
-Interface didática e operacional, reconstruída sobre React/Tailwind existentes. Taste: `framed-sheet`, seed `1914944244`; Impeccable: `seed:7e6e68c91a3a9d09`, mode Operate. Code-first por ser uma aplicação operacional. O quarto candidato fundamentado é o caderno de pesquisa computacional: texto explicativo, experimento e código conectados na mesma sequência de investigação.
+Caderno de investigação. Uma aplicação didática que parece o caderno de alguém
+curioso: papel quente, tinta azul-petróleo, anotações à mão na margem e as
+imagens 32 × 32 coladas como fotos. Escolhida pelo autor em 2026-10-28 para
+substituir a direção anterior (`framed-sheet`, IBM Plex), que ficou fria,
+"quadrada e crua" para um público de portfólio e de leigos curiosos.
 
-Alternativas consideradas: artigo científico, atlas de imagens, folha de revisão de código, caderno computacional, cartaz de divulgação, ficha de experimento e publicação de dados. O caderno permite explorar parâmetros e implementação sem transformar a interface em uma imitação de um terminal. A disciplina de ligar afirmações a evidências, presente no challenger monocromático, reforça a proposta; o cenário de horários com vidro inclinado perde em clareza e identificação para esta tarefa.
+Construída com as skills impeccable (modo Operate, com a visão geral mais
+expressiva), design-taste-frontend e emil-design-eng. Onde o briefing pede
+calor humano (fonte manuscrita, fotos com sombra), ele prevalece sobre as regras
+gerais das skills; o restante delas continua valendo.
 
 ## Idea
 
-O caminho dados → gradientes → reconstrução organiza a explicação, a configuração, os resultados e o acesso ao código real. A matriz da introdução é conceitual e rotulada; nunca se apresenta como reconstrução de uma execução.
+No laboratório, o caminho imagem → pistas → reconstrução vira a anotação de uma
+investigação. As imagens reais do experimento (o dinossauro, o ruído inicial, a
+reconstrução) são as "fotos coladas"; as notas à mão dizem o que observar, nunca
+inventam um resultado.
 
 ## System
 
-- Moldura azul-cinza `#edf2f4`; área branca, inset de 8px, raio de 16px, sem sombra.
-- Texto `#172b36`; secundário `#526570`; teal `#166477` nos dados e links.
-- IBM Plex Sans; IBM Plex Mono reservado a equações e código Python.
-- Navegação lateral de 228px; menu recolhível no celular; conteúdo com margens iguais.
-- Formulários em superfícies neutras. Uma ação principal inicia o experimento.
-- Movimento responde à interação com o diagrama, botões e navegação; nada oculta conteúdo. Redução de movimento respeitada.
+- Fundo `--paper #f1eee8` com pontilhado de caderno (só no fundo, nunca sob o
+  texto); folha `--sheet #fffdf9`, raio 24px, sem sombra; painéis internos em
+  `--raised #f5f2ec`, raio 18–24px.
+- Tinta `--text #1f2a30`; secundário `--ink-soft #3a464b` e `--muted #57625f`;
+  azul-petróleo `--accent #1d6a72` em links, dados e foco.
+- Marca-texto `--marker #ffe27a`: uma frase-chave por tela e a seleção de texto.
+- Caneta `--pen #2b59a6`: só as notas manuscritas.
+- Tipografia: Newsreader (títulos), Figtree (texto, 15–17.5px, tinta cheia),
+  Caveat (notas à mão, rótulos de foto, assinatura) e IBM Plex Mono só em
+  código, arquivos e registros reais.
+- Botões principais em pílula na cor da tinta; links sublinhados com recuo.
+  Separadores tracejados, como as linhas de um caderno.
+- `.photo`: moldura branca, fita adesiva, leve inclinação e sombra de objeto
+  físico; endireita no hover (só ponteiros finos).
+- Navegação lateral de 244px; gaveta no celular.
+
+## Motion
+
+Curvas fortes (`--ease-out cubic-bezier(0.23, 1, 0.32, 1)`), 160–320ms na
+interface. Botões respondem ao toque com `scale(0.97)`. A visão geral entra em
+cascata (60ms entre elementos), o marca-texto se desenha e a nota "comece por
+aqui!" aparece por último; trocas de aba usam um fade curto. Hover só em
+`(hover: hover) and (pointer: fine)`. Com redução de movimento, nada se desloca
+e tudo aparece no estado final.
 
 ## Product truth
 
-Preservar endpoints e funções científicas. O frontend mostra contagens reais por etapa, recebidas do backend via stream, sem estimar tempo restante ou um percentual global entre treino e reconstrução. Cancelamento é da espera/requisição; o processamento Python pode continuar. Não fabricar imagens ou métricas para preencher estados vazios.
+Preservar endpoints e funções científicas. O frontend mostra contagens reais
+por etapa, recebidas do backend via stream, sem estimar tempo restante. Cancelar
+encerra a espera; o processamento Python pode continuar. Não fabricar imagens ou
+métricas: as fotos da visão geral vêm de `learning-demo.json` (execução real
+registrada) e os estados vazios mostram molduras vazias, não resultados falsos.
 
 ## Surfaces
 
-Visão geral didática; experimento com resumo; execução; reconstruções e snapshots; análise; explorador de quatro arquivos Python carregados da implementação local no build.
+Visão geral didática; experimento com resumo (completo e showcase); execução;
+reconstruções e snapshots; análise; explorador de quatro arquivos Python.
 
 ## Validation
 
-As capturas e relatórios locais ficam em `.taste-skill/`, ignorados pelo Git. O título maior na visão geral é uma exceção deliberada ao tamanho de título de app do inspector: essa superfície apresenta o conceito; as telas operacionais usam títulos menores.
+Capturas em `.taste-skill/redesign-*` (antes e depois, 1440/768/390px),
+ignoradas pelo Git. Desvios conscientes do inspetor do taste: três famílias de
+fonte (a manuscrita é o conceito), sombras nas fotos coladas, título da visão
+geral maior que o de tela de app e fonte diferente da direção antiga registrada
+em `.taste-skill/direction.json`.
